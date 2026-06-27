@@ -1,0 +1,11 @@
+schema: wbc_motion_library_v1
+dataset: samples
+robot: g1
+bundle: null
+bundle_path: /home/lev/wbc-mjlab/data/g1/samples
+num_clips: 12
+total_frames: 79484
+fps: 50.0
+clips: [dance1_subject1, fallAndGetUp1_subject1, fight1_subject2, fightAndSports1_subject1,
+  flip_090_001__A304, flip_090_002__A304, flip_090_003__A304_M, flip_360_009__A416,
+  flip_360_011__A416, run1_subject2, sprint1_subject2, walk1_subject1]

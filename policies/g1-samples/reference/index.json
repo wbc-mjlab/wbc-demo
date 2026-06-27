@@ -1,0 +1,155 @@
+{
+  "schema": "wbc_reference_stream_v1",
+  "robot": "g1",
+  "commandDim": 39,
+  "fps": 50.0,
+  "refTerms": [
+    {
+      "name": "ref_base_height",
+      "dim": 1
+    },
+    {
+      "name": "ref_base_lin_vel_b",
+      "dim": 3
+    },
+    {
+      "name": "ref_base_ang_vel_b",
+      "dim": 3
+    },
+    {
+      "name": "ref_gravity_b",
+      "dim": 3
+    },
+    {
+      "name": "ref_joint_pos",
+      "dim": 29
+    }
+  ],
+  "clips": [
+    {
+      "id": "dance1_subject1",
+      "name": "Dance1 Subject1",
+      "file": "dance1_subject1.bin",
+      "frames": 6574,
+      "durationSec": 131.48,
+      "tags": [
+        "dance"
+      ]
+    },
+    {
+      "id": "fallAndGetUp1_subject1",
+      "name": "Fallandgetup1 Subject1",
+      "file": "fallAndGetUp1_subject1.bin",
+      "frames": 8410,
+      "durationSec": 168.2,
+      "tags": [
+        "getup"
+      ]
+    },
+    {
+      "id": "fight1_subject2",
+      "name": "Fight1 Subject2",
+      "file": "fight1_subject2.bin",
+      "frames": 12244,
+      "durationSec": 244.88,
+      "tags": [
+        "fight"
+      ]
+    },
+    {
+      "id": "fightAndSports1_subject1",
+      "name": "Fightandsports1 Subject1",
+      "file": "fightAndSports1_subject1.bin",
+      "frames": 12257,
+      "durationSec": 245.14,
+      "tags": [
+        "fight",
+        "sport"
+      ]
+    },
+    {
+      "id": "flip_090_001__A304",
+      "name": "Flip 090 001  A304",
+      "file": "flip_090_001__A304.bin",
+      "frames": 359,
+      "durationSec": 7.18,
+      "tags": [
+        "flip"
+      ]
+    },
+    {
+      "id": "flip_090_002__A304",
+      "name": "Flip 090 002  A304",
+      "file": "flip_090_002__A304.bin",
+      "frames": 315,
+      "durationSec": 6.3,
+      "tags": [
+        "flip"
+      ]
+    },
+    {
+      "id": "flip_090_003__A304_M",
+      "name": "Flip 090 003  A304 M",
+      "file": "flip_090_003__A304_M.bin",
+      "frames": 230,
+      "durationSec": 4.6,
+      "tags": [
+        "flip"
+      ]
+    },
+    {
+      "id": "flip_360_009__A416",
+      "name": "Flip 360 009  A416",
+      "file": "flip_360_009__A416.bin",
+      "frames": 245,
+      "durationSec": 4.9,
+      "tags": [
+        "flip"
+      ]
+    },
+    {
+      "id": "flip_360_011__A416",
+      "name": "Flip 360 011  A416",
+      "file": "flip_360_011__A416.bin",
+      "frames": 240,
+      "durationSec": 4.8,
+      "tags": [
+        "flip"
+      ]
+    },
+    {
+      "id": "run1_subject2",
+      "name": "Run1 Subject2",
+      "file": "run1_subject2.bin",
+      "frames": 11890,
+      "durationSec": 237.8,
+      "tags": [
+        "run",
+        "locomotion"
+      ]
+    },
+    {
+      "id": "sprint1_subject2",
+      "name": "Sprint1 Subject2",
+      "file": "sprint1_subject2.bin",
+      "frames": 13655,
+      "durationSec": 273.1,
+      "tags": [
+        "sprint",
+        "run",
+        "locomotion"
+      ]
+    },
+    {
+      "id": "walk1_subject1",
+      "name": "Walk1 Subject1",
+      "file": "walk1_subject1.bin",
+      "frames": 13065,
+      "durationSec": 261.3,
+      "tags": [
+        "walk",
+        "locomotion"
+      ]
+    }
+  ]
+}

@@ -71,6 +71,13 @@ export async function loadG1Sim(opts: {
   sceneXml: string; // basename of the scene MJCF, e.g. `scene_g1.xml`
   meshFiles: string[]; // STL basenames under `assets/`
   onProgress?: (loaded: number, total: number) => void;
+  /**
+   * Optional transform applied to the scene XML text before it is compiled.
+   * The live engine uses this to inject an `<option>` that pins the physics
+   * timestep/integrator/solver to match training, without mutating the shared
+   * scene file (which the spike + source MJCF mirror unchanged).
+   */
+  xmlTransform?: (xml: string) => string;
 }): Promise<MujocoSim> {
   const mujoco = await getMujoco();
   const FS = mujoco.FS;
@@ -89,8 +96,10 @@ export async function loadG1Sim(opts: {
     /* already exists */
   }
 
-  // Fetch the scene XML as text.
-  const xmlText = await fetchText(`${opts.baseUrl}${opts.sceneXml}`);
+  // Fetch the scene XML as text, optionally transforming it (e.g. to pin the
+  // <option> physics timing for training parity).
+  let xmlText = await fetchText(`${opts.baseUrl}${opts.sceneXml}`);
+  if (opts.xmlTransform) xmlText = opts.xmlTransform(xmlText);
   FS.writeFile(`${workDir}/${opts.sceneXml}`, xmlText);
 
   // Fetch + write every mesh in parallel, reporting progress.

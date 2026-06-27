@@ -1,0 +1,16 @@
+# wbc-demo policy manifest (schemaVersion 1) — edit metadata before commit
+schemaVersion: '1'
+name: G1 Wbc-G1
+description: Zest Table S4 tracking + RSI, EE z resets, light foot slip / anti-shake,
+  history=1.
+robot: g1
+tags: [locomotion]
+author: wbc-mjlab
+links: {code: 'https://github.com/wbc-mjlab/wbc-mjlab'}
+thumbnail: thumb.png
+defaultClip: dance1_subject1
+camera: default
+artifacts:
+  onnx: policy.onnx
+  config: config.yaml
+  clips: {kind: manifest, file: motion_library.yaml, default: dance1_subject1}
