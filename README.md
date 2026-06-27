@@ -16,6 +16,7 @@ npm install      # install deps (generates package-lock.json — commit it)
 npm run dev      # start the Vite dev server (http://localhost:5173/wbc-demo/)
 npm run build    # type-check (tsc) + production build into dist/
 npm run preview  # serve the production build locally
+npm run validate # validate every policies/*/policy.yaml against the schema
 ```
 
 Requires Node ≥ 20.19 (or ≥ 22.12), per Vite 8.
@@ -28,12 +29,15 @@ Requires Node ≥ 20.19 (or ≥ 22.12), per Vite 8.
 
 1. Create `policies/<policy-id>/` with a `policy.yaml` manifest (+ artifacts:
    `policy.onnx`, `config.yaml`, clips, thumbnail).
-2. Open a PR. On merge to `main`, CI builds and the gallery picks it up
+2. Run `npm run validate` to check the manifest against the schema.
+3. Open a PR. On merge to `main`, CI builds and the gallery picks it up
    automatically — no code edits.
 
 See [`policies/README.md`](policies/README.md) for the folder layout and the
-(interim) manifest fields. The authoritative manifest schema is owned by issue
-**wbc-mjlab-0d8**.
+full manifest field reference. The manifest contract is defined by
+[`policies/policy.schema.json`](policies/policy.schema.json) (JSON Schema) and
+mirrored by `PolicyManifest` in [`src/types.ts`](src/types.ts) (issue
+**wbc-mjlab-0d8**).
 
 ## Project layout
 
@@ -43,12 +47,15 @@ vite.config.ts             # base: '/wbc-demo/'; multi-page build
 src/
   main.ts                  # gallery: renders a card per discovered policy
   policy-page.ts           # per-policy view: mounts the Three.js viewport
-  registry.ts              # build-time discovery of policies/*/policy.yaml
-  types.ts                 # PolicyManifest (INTERIM — see wbc-mjlab-0d8)
+  registry.ts              # build-time discovery + schema validation of policies
+  validate-manifest.ts     # shared Ajv validator (registry + CI script use it)
+  types.ts                 # PolicyManifest contract (final — see wbc-mjlab-0d8)
   viewer/renderer.ts       # shared Three.js viewport + M2 live-engine mount point
   styles/tokens.css        # design tokens PLACEHOLDER (real palette: wbc-mjlab-cfd)
   styles/app.css           # application styles
+scripts/validate.ts        # `npm run validate` — CI manifest gate (wbc-mjlab-2of)
 policies/                  # one folder per policy (data source for the gallery)
+  policy.schema.json       # JSON Schema for policy.yaml (authoritative contract)
 public/                    # static assets copied verbatim into the build
 .github/workflows/deploy.yml   # GitHub Pages build + deploy
 ```
@@ -56,7 +63,7 @@ public/                    # static assets copied verbatim into the build
 ## Roadmap (relative to this scaffold)
 
 - **wbc-mjlab-cfd** — real design tokens / org palette → drop into `tokens.css`.
-- **wbc-mjlab-0d8** — finalize the `policy.yaml` manifest schema.
+- **wbc-mjlab-0d8** — manifest schema ✅ (`policies/policy.schema.json` + `src/types.ts`).
 - **wbc-mjlab-9as** — robot meshes (GLB); today the viewport shows a placeholder box.
 - **wbc-mjlab-3ne** — playback rendering of recorded clips in the viewport.
 - **M2** — live in-browser engine (mujoco-wasm + onnxruntime-web) at the

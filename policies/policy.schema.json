@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/wbc-mjlab/wbc-demo/policies/policy.schema.json",
+  "title": "wbc-demo policy manifest",
+  "description": "Human-authored metadata + artifact pointers for one policy in the wbc-demo gallery. Lives at policies/<id>/policy.yaml. Mirrors the PolicyManifest TypeScript interface in src/types.ts (issue wbc-mjlab-0d8). policy.yaml references the exporter's machine artifacts (policy.onnx, config.yaml, a clip set, a thumbnail) but never duplicates their contents.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "name"],
+  "properties": {
+    "schemaVersion": {
+      "description": "Manifest schema version. Currently \"1\". Bumped on breaking manifest changes so the loader can migrate or reject incompatible files.",
+      "type": "string",
+      "enum": ["1"]
+    },
+    "id": {
+      "description": "Optional in-file id. The FOLDER NAME is authoritative for the URL slug and registry id; if present here it is advisory and SHOULD match the folder name. URL-safe, lowercase kebab-case.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "name": {
+      "description": "Display name shown on the gallery card and the policy page.",
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "description": "One-line summary for the gallery card.",
+      "type": "string"
+    },
+    "robot": {
+      "description": "Robot/embodiment id, e.g. \"g1\". Matches the exporter's robot_id in config.yaml and robot in motion_library.yaml. Selects the robot GLB the viewer loads (issue wbc-mjlab-9as).",
+      "type": "string",
+      "minLength": 1
+    },
+    "tags": {
+      "description": "Skill/grouping tags for gallery filtering. Known tags are suggested for consistency, but arbitrary tags are allowed.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/tag"
+      },
+      "uniqueItems": true
+    },
+    "author": {
+      "description": "Policy author / contributor name or handle.",
+      "type": "string"
+    },
+    "links": {
+      "description": "External links surfaced on the policy page. All optional.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "paper": {
+          "description": "Paper / project page URL.",
+          "type": "string",
+          "format": "uri"
+        },
+        "code": {
+          "description": "Source-code / training-recipe URL.",
+          "type": "string",
+          "format": "uri"
+        },
+        "runUrl": {
+          "description": "Training run URL (e.g. Weights & Biases).",
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "thumbnail": {
+      "description": "Thumbnail image path, relative to the policy folder (e.g. \"thumb.png\"). Shown on the gallery card.",
+      "$ref": "#/$defs/relPath"
+    },
+    "defaultClip": {
+      "description": "Id of the clip to show first on the policy page. Must match a clip id in artifacts.clips (inline) or in the referenced motion library (manifest). The page falls back to the first available clip if omitted.",
+      "type": "string",
+      "minLength": 1
+    },
+    "camera": {
+      "description": "Camera framing for the viewport: a named preset, or an explicit {pos,target} pose in world-space metres (Three.js axes, Y up).",
+      "oneOf": [
+        {
+          "description": "Named camera preset.",
+          "type": "string",
+          "enum": ["default", "front", "side", "top", "orbit"]
+        },
+        {
+          "description": "Explicit camera pose. pos -> camera.position; target -> orbit/look-at target.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pos", "target"],
+          "properties": {
+            "pos": { "$ref": "#/$defs/vec3" },
+            "target": { "$ref": "#/$defs/vec3" }
+          }
+        }
+      ]
+    },
+    "artifacts": {
+      "description": "Pointers to the policy's machine artifacts. Paths are relative to the policy folder. Optional for an M1 metadata-only card; required for the M2 live engine.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["onnx"],
+      "properties": {
+        "onnx": {
+          "description": "ONNX policy network, e.g. \"policy.onnx\" (M2 live engine: onnxruntime-web).",
+          "$ref": "#/$defs/relPath"
+        },
+        "config": {
+          "description": "Deploy obs/action config, e.g. \"config.yaml\" (schema_version: wbc_tracking_params_v1). Consumed by the M2 engine to wire the observation/action layout. Playback (M1) does not need it.",
+          "$ref": "#/$defs/relPath"
+        },
+        "clips": {
+          "description": "Clip set for playback (issue wbc-mjlab-3ne). Pick ONE form: inline list with display metadata, OR a pointer to a motion_library.yaml manifest.",
+          "oneOf": [
+            {
+              "description": "Inline list of clips with display metadata. Best for a small, hand-curated showcase set.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "clips"],
+              "properties": {
+                "kind": { "const": "inline" },
+                "clips": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": { "$ref": "#/$defs/clip" }
+                }
+              }
+            },
+            {
+              "description": "Pointer to a motion_library.yaml manifest (schema: wbc_motion_library_v1) in the policy folder. Best for the exporter's bulk output; per-clip names/files are resolved from that file at load time.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "file"],
+              "properties": {
+                "kind": { "const": "manifest" },
+                "file": {
+                  "description": "Path to the motion-library manifest, relative to the policy folder.",
+                  "$ref": "#/$defs/relPath"
+                },
+                "default": {
+                  "description": "Id of the clip to show first (must exist in the referenced library).",
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "tag": {
+      "description": "A skill/grouping tag. Known tags are suggested via examples; any non-empty string is accepted.",
+      "type": "string",
+      "minLength": 1,
+      "examples": [
+        "walk",
+        "run",
+        "sprint",
+        "jump",
+        "flip",
+        "fight",
+        "dance",
+        "getup",
+        "crawl",
+        "locomotion",
+        "manipulation",
+        "sport"
+      ]
+    },
+    "relPath": {
+      "description": "A path relative to the policy folder. Must not be absolute or escape the folder.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*\\.\\.).+$"
+    },
+    "vec3": {
+      "description": "A 3-vector [x, y, z] in world-space metres.",
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "type": "number" }
+    },
+    "clip": {
+      "description": "A single inline playback clip.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "file"],
+      "properties": {
+        "id": {
+          "description": "Stable, URL-safe clip id. Matches an entry in the motion library.",
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "description": "Human label, e.g. \"Walk forward\".",
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "description": "Path to the clip's playback data, relative to the policy folder. Format owned by issue wbc-mjlab-3ne.",
+          "$ref": "#/$defs/relPath"
+        },
+        "tags": {
+          "description": "Optional per-clip skill tags.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/tag" },
+          "uniqueItems": true
+        },
+        "durationSec": {
+          "description": "Optional clip length in seconds (drives the scrubber range).",
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    }
+  }
+}

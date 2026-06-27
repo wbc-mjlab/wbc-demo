@@ -22,10 +22,12 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
+    /* Import policy.schema.json directly (shared by the frontend + validator). */
+    "resolveJsonModule": true,
 
     /* Vite client types (import.meta.glob, ?raw imports, import.meta.env) plus
      * Node types for vite.config.ts (node:path, __dirname). */
     "types": ["vite/client", "node"]
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "scripts", "vite.config.ts"]
 }

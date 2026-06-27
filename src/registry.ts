@@ -8,13 +8,15 @@
  *     adding a policy = drop `policies/<id>/policy.yaml` (+ artifacts) → PR.
  *     No code edits here.
  *
- * @see policies/README.md  — folder layout
- * @see types.ts            — interim manifest shape (wbc-mjlab-0d8 finalizes it)
+ * @see policies/README.md         — folder layout
+ * @see types.ts                   — manifest shape (wbc-mjlab-0d8, final)
+ * @see policies/policy.schema.json — schema validated against here
  */
 
 // js-yaml v5 is pure ESM with named exports (no default export).
 import { load as loadYaml } from 'js-yaml';
 import type { PolicyEntry, PolicyManifest } from './types';
+import { validateManifest } from './validate-manifest';
 
 /**
  * Eagerly import every policy manifest as a raw string. The glob is relative to
@@ -62,9 +64,11 @@ function policyBaseUrl(id: string): string {
 }
 
 /**
- * Discover all committed policies. Parses + lightly validates each manifest.
- * Invalid manifests are skipped with a console warning rather than crashing the
- * whole gallery (one bad PR shouldn't take the site down).
+ * Discover all committed policies. Parses + validates each manifest against
+ * `policies/policy.schema.json`. Invalid manifests are SKIPPED with a clear
+ * console warning rather than crashing the whole gallery (one bad PR shouldn't
+ * take the site down). The same schema is enforced hard by `npm run validate`
+ * in CI, so invalid manifests should never reach `main`.
  *
  * @param includeExample keep the removable `_example` policy (default: true so
  *   the gallery is never empty before real policies land).
@@ -84,14 +88,18 @@ export function discoverPolicies(includeExample = true): PolicyEntry[] {
       continue;
     }
 
-    if (!isManifestLike(parsed)) {
-      console.warn(`[registry] Skipping ${path}: missing required "name" field.`);
+    const result = validateManifest(parsed);
+    if (!result.valid) {
+      console.warn(
+        `[registry] Skipping ${path}: invalid manifest:\n  - ${result.messages.join('\n  - ')}`,
+      );
       continue;
     }
 
-    // Folder name is authoritative for the id (manifest `id` is advisory until
-    // wbc-mjlab-0d8 decides). This keeps URLs stable regardless of manifest.
-    const manifest: PolicyManifest = { ...parsed, id };
+    // Validated against the schema above, so `parsed` is a PolicyManifest.
+    // Folder name is authoritative for the id (manifest `id` is advisory); we
+    // override it so URLs stay stable regardless of the manifest's own `id`.
+    const manifest: PolicyManifest = { ...(parsed as PolicyManifest), id };
 
     entries.push({ id, manifest, baseUrl: policyBaseUrl(id) });
   }
@@ -109,16 +117,4 @@ export function discoverPolicies(includeExample = true): PolicyEntry[] {
 /** Look up a single policy by its folder id. */
 export function getPolicy(id: string): PolicyEntry | undefined {
   return discoverPolicies().find((p) => p.id === id);
-}
-
-/**
- * Minimal runtime validation against the INTERIM schema: a manifest just needs
- * a `name`. wbc-mjlab-0d8 will replace this with a real schema validator.
- */
-function isManifestLike(value: unknown): value is PolicyManifest {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof (value as { name?: unknown }).name === 'string'
-  );
 }

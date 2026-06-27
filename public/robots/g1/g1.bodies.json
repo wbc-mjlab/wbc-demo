@@ -1,0 +1,164 @@
+{
+  "robot": "unitree_g1_29dof",
+  "source_xml": "/Users/lev/github.com/wbc-mjlab/wbc-mjlab/src/wbc_mjlab/robots/g1/xmls/g1.xml",
+  "coordinate_frame": "z_up_world (MuJoCo native)",
+  "note": "Order/naming is the contract. Trajectory exporter (wbc-mjlab-5uw) must emit body_pos_w / body_quat_w (quat = w,x,y,z) per body in THIS order. Renderer sets each GLB node's world transform from those. Index 0 is the MuJoCo 'world' body; it has no mesh node in the GLB.",
+  "body_count": 31,
+  "bodies": [
+    {
+      "index": 0,
+      "name": "world",
+      "parent": "world"
+    },
+    {
+      "index": 1,
+      "name": "pelvis",
+      "parent": "world"
+    },
+    {
+      "index": 2,
+      "name": "left_hip_pitch_link",
+      "parent": "pelvis"
+    },
+    {
+      "index": 3,
+      "name": "left_hip_roll_link",
+      "parent": "left_hip_pitch_link"
+    },
+    {
+      "index": 4,
+      "name": "left_hip_yaw_link",
+      "parent": "left_hip_roll_link"
+    },
+    {
+      "index": 5,
+      "name": "left_knee_link",
+      "parent": "left_hip_yaw_link"
+    },
+    {
+      "index": 6,
+      "name": "left_ankle_pitch_link",
+      "parent": "left_knee_link"
+    },
+    {
+      "index": 7,
+      "name": "left_ankle_roll_link",
+      "parent": "left_ankle_pitch_link"
+    },
+    {
+      "index": 8,
+      "name": "right_hip_pitch_link",
+      "parent": "pelvis"
+    },
+    {
+      "index": 9,
+      "name": "right_hip_roll_link",
+      "parent": "right_hip_pitch_link"
+    },
+    {
+      "index": 10,
+      "name": "right_hip_yaw_link",
+      "parent": "right_hip_roll_link"
+    },
+    {
+      "index": 11,
+      "name": "right_knee_link",
+      "parent": "right_hip_yaw_link"
+    },
+    {
+      "index": 12,
+      "name": "right_ankle_pitch_link",
+      "parent": "right_knee_link"
+    },
+    {
+      "index": 13,
+      "name": "right_ankle_roll_link",
+      "parent": "right_ankle_pitch_link"
+    },
+    {
+      "index": 14,
+      "name": "waist_yaw_link",
+      "parent": "pelvis"
+    },
+    {
+      "index": 15,
+      "name": "waist_roll_link",
+      "parent": "waist_yaw_link"
+    },
+    {
+      "index": 16,
+      "name": "torso_link",
+      "parent": "waist_roll_link"
+    },
+    {
+      "index": 17,
+      "name": "left_shoulder_pitch_link",
+      "parent": "torso_link"
+    },
+    {
+      "index": 18,
+      "name": "left_shoulder_roll_link",
+      "parent": "left_shoulder_pitch_link"
+    },
+    {
+      "index": 19,
+      "name": "left_shoulder_yaw_link",
+      "parent": "left_shoulder_roll_link"
+    },
+    {
+      "index": 20,
+      "name": "left_elbow_link",
+      "parent": "left_shoulder_yaw_link"
+    },
+    {
+      "index": 21,
+      "name": "left_wrist_roll_link",
+      "parent": "left_elbow_link"
+    },
+    {
+      "index": 22,
+      "name": "left_wrist_pitch_link",
+      "parent": "left_wrist_roll_link"
+    },
+    {
+      "index": 23,
+      "name": "left_wrist_yaw_link",
+      "parent": "left_wrist_pitch_link"
+    },
+    {
+      "index": 24,
+      "name": "right_shoulder_pitch_link",
+      "parent": "torso_link"
+    },
+    {
+      "index": 25,
+      "name": "right_shoulder_roll_link",
+      "parent": "right_shoulder_pitch_link"
+    },
+    {
+      "index": 26,
+      "name": "right_shoulder_yaw_link",
+      "parent": "right_shoulder_roll_link"
+    },
+    {
+      "index": 27,
+      "name": "right_elbow_link",
+      "parent": "right_shoulder_yaw_link"
+    },
+    {
+      "index": 28,
+      "name": "right_wrist_roll_link",
+      "parent": "right_elbow_link"
+    },
+    {
+      "index": 29,
+      "name": "right_wrist_pitch_link",
+      "parent": "right_wrist_roll_link"
+    },
+    {
+      "index": 30,
+      "name": "right_wrist_yaw_link",
+      "parent": "right_wrist_pitch_link"
+    }
+  ]
+}
