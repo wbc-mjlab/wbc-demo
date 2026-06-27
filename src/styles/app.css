@@ -177,3 +177,77 @@ a:hover {
   color: var(--color-text-muted);
   font-size: 0.9rem;
 }
+
+/* --- Live gallery cards (wbc-mjlab-g8h) ------------------------------------ */
+.gallery--live {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+.gcard {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  color: var(--color-text);
+  text-decoration: none;
+  transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+}
+.gcard:hover {
+  border-color: var(--color-accent);
+  transform: translateY(-3px);
+  box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.6);
+  text-decoration: none;
+}
+.gcard__stage {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background: radial-gradient(120% 90% at 50% 30%, #1b3047 0%, var(--color-viewport-bg) 70%);
+}
+.gcard__stage canvas { display: block; }
+/* Swallow pointer events over the canvas so a click navigates (no orbit spin). */
+.gcard__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.gcard__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.gcard__title {
+  font-size: 1rem;
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gcard__badge {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.16rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.gcard__badge[data-live="live"] { color: var(--color-accent); border-color: color-mix(in srgb, var(--color-accent) 45%, transparent); }
+.gcard__badge[data-live="boot"] { color: var(--color-amber); }
+.gcard__badge[data-live="paused"],
+.gcard__badge[data-live="capped"] { color: var(--color-text-muted); }
+.gcard__badge[data-live="fell"] { color: var(--color-danger); border-color: color-mix(in srgb, var(--color-danger) 45%, transparent); }
+.gcard__body { padding: 0 var(--space-3) var(--space-3); }
+.gcard__desc {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+.gcard__tags { margin-top: var(--space-2); }

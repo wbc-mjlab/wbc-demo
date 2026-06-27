@@ -89,6 +89,27 @@
   .live__dot { animation: none !important; }
 }
 
+/* Back arrow to the gallery. */
+.live__back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  color: var(--color-text);
+  text-decoration: none;
+  font-size: 16px;
+  line-height: 1;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.live__back:hover {
+  border-color: var(--color-accent);
+  background: var(--color-surface-hover);
+  color: var(--color-accent);
+}
+
 /* ---- Brand + live state -------------------------------------------------- */
 .live__brand {
   display: flex;
@@ -198,6 +219,11 @@
 }
 .live__btn--primary:hover {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 16%, transparent);
+}
+/* Toggled-on warning state (e.g. policy → open-loop). */
+.live__btn--warn {
+  border-color: color-mix(in srgb, var(--color-amber) 60%, transparent);
+  color: var(--color-amber);
 }
 
 /* ---- Telemetry readouts -------------------------------------------------- */

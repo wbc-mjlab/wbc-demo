@@ -47,6 +47,11 @@ function token(name: string, fallback: string): string {
 export interface ViewerOptions {
   /** URL of a GLB/GLTF robot to load. If absent/unloadable → placeholder box. */
   robotUrl?: string;
+  /**
+   * Trim cost for many simultaneous viewports (gallery cards): cap pixel ratio
+   * at 1 and skip the PMREM image-based-lighting pass (3-point lights only).
+   */
+  lowQuality?: boolean;
 }
 
 /**
@@ -84,7 +89,9 @@ export class Viewer {
     this.camera.position.set(2.5, 1.8, 3.0);
 
     this.renderer = new WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(
+      options.lowQuality ? 1 : Math.min(window.devicePixelRatio, 2),
+    );
     this.renderer.setSize(w, h);
     // Filmic tone mapping + a touch of exposure: gives the PBR robot materials a
     // photographic roll-off instead of the flat, clipped look of raw output.
@@ -96,7 +103,7 @@ export class Viewer {
     this.controls.enableDamping = true;
     this.controls.target.set(0, 0.8, 0);
 
-    this.addEnvironment();
+    if (!options.lowQuality) this.addEnvironment();
     this.addLights();
     this.addGround();
 

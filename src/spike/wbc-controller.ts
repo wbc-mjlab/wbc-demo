@@ -91,6 +91,12 @@ export interface WbcController {
   resetToReference(refFrame: Float32Array): void;
   /** Zero the last action / target (e.g. on clip switch). */
   resetActions(): void;
+  /**
+   * Open-loop "policy off": zero the action and drive the PD straight at the
+   * reference joint positions (no inference, no closed-loop balance). Lets the
+   * UI contrast the policy's stabilisation against naive reference replay.
+   */
+  holdReference(refFrame: Float32Array): void;
 }
 
 /**
@@ -384,6 +390,11 @@ export function makeWbcController(opts: {
     processActions(refFrame); // updates the held PD target; substeps recompute tau
   }
 
+  function holdReference(refFrame: Float32Array): void {
+    lastAction.fill(0); // == `actions` obs term were the policy to resume
+    processActions(refFrame); // target = ref_joint_pos (action 0); no balance feedback
+  }
+
   /**
    * Seed the robot on-distribution: set every joint to the reference frame's
    * ref_joint_pos, place the free base above the ground at the reference base
@@ -455,5 +466,6 @@ export function makeWbcController(opts: {
     applyTorque,
     resetToReference,
     resetActions,
+    holdReference,
   };
 }
