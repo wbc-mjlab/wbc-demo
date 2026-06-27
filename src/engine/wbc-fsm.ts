@@ -3,7 +3,8 @@
  *
  * Top-level deploy states (Passive / FixStand / FloorReady) are UI entry paths;
  * this module covers in-tracking behavior: browse vs play, getup when down,
- * liedown when up and idle.
+ * liedown when up and idle. Clip switches only swap the reference stream and
+ * reset policy actions — never teleport the sim (deploy: applyMotionLoader).
  */
 
 export type ClipKind = 'browsable' | 'pose_getup' | 'pose_liedown';

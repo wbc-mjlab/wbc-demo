@@ -8,7 +8,7 @@ clips:
   - name: fight_combo_02
   - name: walk_01
   - name: run_01
-  - name: flip_01
+  # - name: flip_01
   - name: flip_02
   - name: sprint_01
 default: idle_02

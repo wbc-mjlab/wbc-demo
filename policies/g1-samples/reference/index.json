@@ -67,16 +67,6 @@
       ]
     },
     {
-      "id": "flip_01",
-      "name": "Flip 01",
-      "file": "flip_01.bin",
-      "frames": 382,
-      "durationSec": 7.64,
-      "tags": [
-        "flip"
-      ]
-    },
-    {
       "id": "flip_02",
       "name": "Flip 02",
       "file": "flip_02.bin",
@@ -134,8 +124,8 @@
       "id": "getup_01",
       "name": "Get Up",
       "file": "getup_01.bin",
-      "frames": 1,
-      "durationSec": 0.02,
+      "frames": 231,
+      "durationSec": 4.62,
       "tags": [
         "getup"
       ]
@@ -144,8 +134,8 @@
       "id": "liedown_01",
       "name": "Lie Down",
       "file": "liedown_01.bin",
-      "frames": 1,
-      "durationSec": 0.02,
+      "frames": 138,
+      "durationSec": 2.76,
       "tags": [
         "liedown"
       ]

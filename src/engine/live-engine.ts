@@ -430,11 +430,12 @@ export async function createLiveEngine(
     c: ReferenceClip,
     kind: ClipKind,
     autoplay: boolean,
-    resetPose = true,
+    resetPose = false,
   ): Promise<void> {
     activeKind = kind;
     await loadClipStream(c);
     clipFrame = 0;
+    // Deploy applyMotionLoader: swap reference + reset policy episode, not robot qpos.
     if (resetPose) {
       controller.resetToReference(stream.frame(0));
       status.fell = false;
@@ -494,7 +495,7 @@ export async function createLiveEngine(
       msg('getup clip missing from reference index');
       return;
     }
-    await loadClip(c, 'pose_getup', true);
+    await loadClip(c, 'pose_getup', true, false);
   }
 
   async function triggerLiedown(): Promise<void> {
@@ -504,7 +505,7 @@ export async function createLiveEngine(
       msg('liedown clip missing from reference index');
       return;
     }
-    await loadClip(c, 'pose_liedown', true);
+    await loadClip(c, 'pose_liedown', true, false);
   }
 
   function resetToStart(): void {
@@ -541,7 +542,7 @@ export async function createLiveEngine(
     status.error = m; opts.onError?.(m); throw new Error(m);
   }
   fsm.selectedBrowsableIndex = Math.max(0, browsableClips.indexOf(startClip));
-  await loadClip(startClip, 'browsable', opts.autoplay !== false);
+  await loadClip(startClip, 'browsable', opts.autoplay !== false, true);
   frameViewer();
   opts.onReady?.(browsableClips);
 
@@ -639,8 +640,9 @@ export async function createLiveEngine(
     const qz = xquat[b * 4 + 3] as number;
     const gz = -(qw * qw - qx * qx - qy * qy + qz * qz);
     status.upright = +gz.toFixed(3);
-    if (h < 0.45) fellFrames += 1; else fellFrames = 0;
-    status.fell = fellFrames >= 1;
+    if (h < 0.45 && fsm.robotIsUp) fellFrames += 1;
+    else fellFrames = 0;
+    status.fell = fsm.robotIsUp && fellFrames >= 1;
   }
 
   function robotViewRadius(): number | null {
