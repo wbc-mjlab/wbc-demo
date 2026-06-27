@@ -14,23 +14,26 @@
  */
 
 import {
-  AmbientLight,
+  ACESFilmicToneMapping,
   Box3,
   BoxGeometry,
   Color,
   DirectionalLight,
   GridHelper,
   Group,
+  HemisphereLight,
   Mesh,
   MeshStandardMaterial,
   Object3D,
   PerspectiveCamera,
+  PMREMGenerator,
   Scene,
   Vector3,
   WebGLRenderer,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 /** Read a CSS custom property (design token) off :root, with a fallback. */
 function token(name: string, fallback: string): string {
@@ -83,12 +86,17 @@ export class Viewer {
     this.renderer = new WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(w, h);
+    // Filmic tone mapping + a touch of exposure: gives the PBR robot materials a
+    // photographic roll-off instead of the flat, clipped look of raw output.
+    this.renderer.toneMapping = ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.1;
     container.appendChild(this.renderer.domElement);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.target.set(0, 0.8, 0);
 
+    this.addEnvironment();
     this.addLights();
     this.addGround();
 
@@ -110,14 +118,35 @@ export class Viewer {
     };
   }
 
+  /**
+   * Image-based lighting: render three.js' procedural RoomEnvironment to a PMREM
+   * and use it as `scene.environment`. This gives every PBR material soft, real
+   * reflections + ambient occlusion-like grounding for free — no remote HDR, no
+   * external asset (CSP-safe). The biggest single win for how the robot reads.
+   */
+  private addEnvironment(): void {
+    const pmrem = new PMREMGenerator(this.renderer);
+    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
+  }
+
   private addLights(): void {
-    this.scene.add(new AmbientLight(0xffffff, 0.6));
-    const key = new DirectionalLight(0xffffff, 1.2);
-    key.position.set(3, 6, 4);
+    // Sky/ground hemisphere for a soft directional ambient gradient (cool slate
+    // up top, dark below) on top of the IBL.
+    this.scene.add(new HemisphereLight(0xcfe0f2, 0x0b1119, 0.5));
+    // Key light — warm-neutral, high and to the right; the main shaping light.
+    const key = new DirectionalLight(0xffffff, 2.2);
+    key.position.set(4, 7, 5);
     this.scene.add(key);
-    const fill = new DirectionalLight(0xffffff, 0.4);
+    // Fill — dim, opposite side, lifts the shadow side without flattening.
+    const fill = new DirectionalLight(0xffffff, 0.5);
     fill.position.set(-4, 2, -3);
     this.scene.add(fill);
+    // Cyan-tinted rim from behind for edge separation against the slate bg —
+    // echoes the brand accent and makes the silhouette pop.
+    const rim = new DirectionalLight(0x8fe3f0, 1.0);
+    rim.position.set(-3, 5, -7);
+    this.scene.add(rim);
   }
 
   private addGround(): void {

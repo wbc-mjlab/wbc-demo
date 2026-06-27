@@ -1,0 +1,260 @@
+/* =============================================================================
+ * Live engine page — "telemetry console" chrome (issue wbc-mjlab-uxq).
+ * =============================================================================
+ *
+ * A full-bleed MuJoCo + ONNX viewport with a floating glass HUD: a control bar
+ * up top, a telemetry strip along the bottom, and a thin playback scrubber. The
+ * G1 is the hero; the chrome reads *over* the scene. On-brand via tokens.css —
+ * deep slate surfaces + signal-cyan accent. System font stacks only (no remote
+ * fonts), so character comes from tracked uppercase mono micro-labels, hairline
+ * glass borders, and a pulsing "live" signal rather than a display typeface.
+ *
+ * Kept separate from spike.css so the dev mujoco-wasm spike page is unaffected.
+ */
+
+.live {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--color-viewport-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+
+  /* Local glass/accent derivations off the brand tokens. */
+  --hud-bg: color-mix(in srgb, var(--color-bg) 70%, transparent);
+  --hairline: color-mix(in srgb, var(--color-border) 85%, transparent);
+  --glow: color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+
+/* Full-bleed three.js canvas host (renderer appends its <canvas> here). */
+.live__stage {
+  position: absolute;
+  inset: 0;
+}
+.live__stage canvas {
+  display: block;
+}
+
+/* Depth: a soft radial vignette so the translucent HUD reads at the edges. */
+.live__vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: radial-gradient(
+    125% 95% at 50% 36%,
+    transparent 52%,
+    color-mix(in srgb, var(--color-bg) 72%, transparent) 100%
+  );
+}
+
+/* ---- Floating HUD bars --------------------------------------------------- */
+.live__topbar,
+.live__telemetry {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0.7rem 1.05rem;
+  background: var(--hud-bg);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  backdrop-filter: blur(16px) saturate(1.25);
+  z-index: 2;
+}
+.live__topbar {
+  top: 0;
+  border-bottom: 1px solid var(--hairline);
+  animation: hud-down 540ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.live__telemetry {
+  bottom: 0;
+  gap: 0.35rem 1.5rem;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--hairline);
+  font-family: var(--font-mono);
+  animation: hud-up 540ms cubic-bezier(0.2, 0.7, 0.2, 1) 90ms both;
+}
+@keyframes hud-down {
+  from { opacity: 0; transform: translateY(-100%); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes hud-up {
+  from { opacity: 0; transform: translateY(100%); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live__topbar, .live__telemetry { animation: none; }
+  .live__dot { animation: none !important; }
+}
+
+/* ---- Brand + live state -------------------------------------------------- */
+.live__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.live__wordmark {
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  font-size: 0.92rem;
+}
+.live__wordmark b {
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+.live__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: 0 0 0 0 var(--glow);
+  animation: live-pulse 1.7s ease-out infinite;
+}
+@keyframes live-pulse {
+  0%   { box-shadow: 0 0 0 0 var(--glow); }
+  70%  { box-shadow: 0 0 0 7px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.live__state {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 0.14rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  color: var(--color-accent);
+}
+
+/* State variants, toggled via [data-state] on .live. */
+.live[data-state="paused"] .live__dot { background: var(--color-amber); animation: none; }
+.live[data-state="paused"] .live__state { color: var(--color-amber); }
+.live[data-state="fell"]   .live__dot { background: var(--color-danger); animation: none; }
+.live[data-state="fell"]   .live__state { color: var(--color-danger); }
+.live[data-state="boot"]   .live__dot { background: var(--color-text-muted); animation: none; }
+.live[data-state="boot"]   .live__state { color: var(--color-text-muted); }
+
+.live__status {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- Controls ------------------------------------------------------------ */
+.live__controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.live__select {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.live__select > span {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.live__select select,
+.live__btn {
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-surface) 78%, transparent);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 0.4rem 0.72rem;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease,
+    transform 120ms ease, box-shadow 120ms ease;
+}
+.live__btn:hover,
+.live__select select:hover {
+  border-color: var(--color-accent);
+  background: var(--color-surface-hover);
+}
+.live__btn:active { transform: translateY(1px); }
+.live__btn:focus-visible,
+.live__select select:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+.live__btn--primary {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
+  color: var(--color-accent);
+}
+.live__btn--primary:hover {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 16%, transparent);
+}
+
+/* ---- Telemetry readouts -------------------------------------------------- */
+.tm {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.18;
+}
+.tm__k {
+  font-size: 0.58rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.tm__v {
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+.tm[data-tone="ok"] .tm__v   { color: var(--color-success); }
+.tm[data-tone="warn"] .tm__v { color: var(--color-amber); }
+.tm[data-tone="bad"] .tm__v  { color: var(--color-danger); }
+
+/* ---- Playback scrubber (pinned to the very bottom edge) ------------------ */
+.live__progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--hairline);
+  z-index: 3;
+}
+.live__progress > span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--color-accent);
+  box-shadow: 0 0 8px var(--glow);
+  transition: width 200ms linear;
+}
+
+/* ---- Responsive: stack the bar on narrow screens ------------------------- */
+@media (max-width: 680px) {
+  .live__topbar {
+    flex-wrap: wrap;
+    gap: 0.5rem 0.8rem;
+    padding: 0.6rem 0.75rem;
+  }
+  .live__status {
+    order: 3;
+    flex-basis: 100%;
+  }
+  .live__controls { order: 2; }
+  .live__telemetry {
+    gap: 0.25rem 1.1rem;
+    padding: 0.55rem 0.75rem;
+  }
+  .tm__v { font-size: 0.82rem; }
+}

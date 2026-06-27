@@ -4,8 +4,8 @@
  * Closes the loop: mujoco-wasm physics + onnxruntime-web inference + the exact
  * deploy obs/action/PD pipeline, driving the G1 to track a motion clip live in
  * the browser. Builds directly on the spike's load/step/render (mujoco.ts,
- * bind-glb.ts) and adds the policy runner (policy-runner.ts), config + reference
- * loaders (policy-config.ts), and the WBC controller (wbc-controller.ts).
+ * geom-renderer.ts) and adds the policy runner (policy-runner.ts), config +
+ * reference loaders (policy-config.ts), and the WBC controller (wbc-controller.ts).
  *
  *   ┌─ reference stream (.bin, 50 Hz) ─┐
  *   │                                  ▼
@@ -13,7 +13,7 @@
  *                                                              │
  *                              reference_residual + PD→torque ◄┘
  *                                       │
- *                                  data.ctrl ──► mj_step ×4 ──► render (GLB)
+ *                                  data.ctrl ──► mj_step ×4 ──► render (geom)
  *
  * Physics timing pinned to training: timestep 0.005 s, decimation 4 → 50 Hz
  * control, integrator implicitfast, iterations 10 / ls_iterations 20
@@ -23,11 +23,11 @@
  */
 
 import '../styles/app.css';
-import '../styles/spike.css';
+import '../styles/live.css';
 import { Box3, Vector3 } from 'three';
 import { Viewer } from '../viewer/renderer';
 import { loadG1Sim, type MujocoSim } from './mujoco';
-import { bindGlbToSim, type GlbBinding } from './bind-glb';
+import { buildGeomRenderer, type GeomBinding } from './geom-renderer';
 import {
   loadPolicyConfig,
   loadReferenceIndex,
@@ -42,7 +42,6 @@ import { makeWbcController } from './wbc-controller';
 
 const BASE = import.meta.env.BASE_URL;
 const MJCF_BASE = `${BASE}robots/g1/mjcf/`;
-const GLB_URL = `${BASE}robots/g1/g1.meshopt.glb`;
 const POLICY_BASE = `${BASE}policies/g1-samples/`;
 const SCENE_XML = 'scene_g1.xml';
 
@@ -158,11 +157,17 @@ async function main(): Promise<void> {
       `decimation ${status.decimation} @ ${(1 / cfg.policyStepDt).toFixed(0)} Hz`,
   );
 
-  // 3) Viewer + GLB render path (reuse the spike's binding).
+  // 3) Viewer + geom render path: build Three meshes straight from the compiled
+  // MuJoCo geoms (visual groups 1/2) and drive them from data.geom_xpos/xmat.
+  // Reads crisper than the baked GLB and needs no separate mesh asset.
   const viewer = new Viewer(ui.viewport);
   const ph = viewer.robotRoot.getObjectByName('placeholder-robot');
   if (ph) viewer.robotRoot.remove(ph);
-  const glb: GlbBinding = await bindGlbToSim({ glbUrl: GLB_URL, sim, parent: viewer.robotRoot });
+  const robot: GeomBinding = buildGeomRenderer({
+    sim,
+    parent: viewer.robotRoot,
+    includeGroups: new Set([1, 2]),
+  });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (window as any).__viewer = viewer; // diagnostics / headless framing hook
 
@@ -190,7 +195,7 @@ async function main(): Promise<void> {
   function resetToStart(): void {
     clipFrame = 0;
     controller.resetToReference(stream.frame(0));
-    glb.sync(sim);
+    robot.sync(sim);
     status.fell = false;
     fellFrames = 0;
   }
@@ -199,7 +204,7 @@ async function main(): Promise<void> {
   if (!walk) return fail('reference index has no clips');
   await selectClip(walk.id);
   ui.populateClips(refIndex.clips, walk.id, (id) => void selectClip(id));
-  frameViewer(viewer, glb.root);
+  frameViewer(viewer, robot.root);
 
   // ---- Control + render loop ----------------------------------------------
   // Drive the reference stream + policy at exactly cfg.policyStepDt (50 Hz),
@@ -253,7 +258,7 @@ async function main(): Promise<void> {
       })();
     }
 
-    glb.sync(sim);
+    robot.sync(sim);
     followRobot();
     frameCount += 1;
 
@@ -369,36 +374,72 @@ function frameViewer(viewer: Viewer, target: import('three').Object3D): void {
   viewer.camera.updateProjectionMatrix();
 }
 
-// ---- Minimal UI (play/pause, clip picker, reset) ----------------------------
+// ---- HUD chrome (telemetry console: status pill, clip picker, readouts) -----
 function buildUi() {
   const root = document.querySelector<HTMLElement>('#app');
   if (!root) throw new Error('#app missing');
   root.innerHTML = `
-    <div class="spike">
-      <header class="spike__bar">
-        <strong>G1 · live WBC tracking</strong>
-        <span class="spike__status" id="lv-status">booting…</span>
-        <select id="lv-clip" class="spike__btn"></select>
-        <button id="lv-play" class="spike__btn">pause</button>
-        <button id="lv-reset" class="spike__btn">reset</button>
+    <div class="live" id="lv-root" data-state="boot">
+      <div class="live__stage" id="lv-viewport"></div>
+      <div class="live__vignette" aria-hidden="true"></div>
+
+      <header class="live__topbar">
+        <div class="live__brand">
+          <span class="live__dot" aria-hidden="true"></span>
+          <span class="live__wordmark">G1&nbsp;·&nbsp;<b>WBC</b></span>
+          <span class="live__state" id="lv-state">boot</span>
+        </div>
+        <div class="live__status" id="lv-status">booting…</div>
+        <div class="live__controls">
+          <label class="live__select"><span>clip</span><select id="lv-clip"></select></label>
+          <button id="lv-play" class="live__btn live__btn--primary">⏸&nbsp;pause</button>
+          <button id="lv-reset" class="live__btn">↺&nbsp;reset</button>
+        </div>
       </header>
-      <div class="spike__viewport" id="lv-viewport"></div>
-      <footer class="spike__metrics" id="lv-metrics"></footer>
+
+      <footer class="live__telemetry" id="lv-metrics"></footer>
+      <div class="live__progress" aria-hidden="true"><span id="lv-progress"></span></div>
     </div>`;
+
+  const rootEl = root.querySelector<HTMLElement>('#lv-root')!;
   const viewport = root.querySelector<HTMLElement>('#lv-viewport')!;
   const statusEl = root.querySelector<HTMLElement>('#lv-status')!;
+  const stateEl = root.querySelector<HTMLElement>('#lv-state')!;
   const metricsEl = root.querySelector<HTMLElement>('#lv-metrics')!;
+  const progressEl = root.querySelector<HTMLElement>('#lv-progress')!;
   const playEl = root.querySelector<HTMLButtonElement>('#lv-play')!;
   const resetEl = root.querySelector<HTMLButtonElement>('#lv-reset')!;
   const clipEl = root.querySelector<HTMLSelectElement>('#lv-clip')!;
+
+  let playing = true;
+  let latest: LiveStatus | undefined;
+
+  // The live-state pill: error/fell (red) → boot (grey) → paused (amber) → live.
+  function renderState(): void {
+    let state = 'live';
+    let label = 'live';
+    if (latest?.error) { state = 'fell'; label = 'error'; }
+    else if (latest?.fell) { state = 'fell'; label = 'fell'; }
+    else if (!latest?.ready) { state = 'boot'; label = 'boot'; }
+    else if (!playing) { state = 'paused'; label = 'paused'; }
+    rootEl.dataset.state = state;
+    stateEl.textContent = label;
+  }
+
   return {
     viewport,
     setStatus(s: string, err = false) {
       statusEl.textContent = s;
-      statusEl.style.color = err ? '#ff6b6b' : '';
+      statusEl.style.color = err ? 'var(--color-danger)' : '';
+      if (err) {
+        rootEl.dataset.state = 'fell';
+        stateEl.textContent = 'error';
+      }
     },
-    setPlaying(playing: boolean) {
-      playEl.textContent = playing ? 'pause' : 'play';
+    setPlaying(p: boolean) {
+      playing = p;
+      playEl.innerHTML = p ? '⏸&nbsp;pause' : '▶&nbsp;play';
+      renderState();
     },
     onPlayPause(fn: () => void) {
       playEl.addEventListener('click', fn);
@@ -412,26 +453,46 @@ function buildUi() {
         .join('');
       clipEl.addEventListener('change', () => fn(clipEl.value));
     },
-    updateMetrics(s: LiveStatus, clip?: ReferenceClip) {
+    updateMetrics(s: LiveStatus, _clip?: ReferenceClip) {
+      latest = s;
+      renderState();
       metricsEl.innerHTML = [
-        kv('load', s.loadMs != null ? `${s.loadMs} ms` : '…'),
-        kv('obs', s.modelObsDim != null ? `${s.obsDim}/${s.modelObsDim}` : '…'),
-        kv('act', s.actionDim ?? '…'),
-        kv('clip', clip?.name ?? '…'),
-        kv('frame', s.clipFrame != null ? `${s.clipFrame}/${s.clipFrames}` : '…'),
-        kv('ctrl Hz', s.controlHz ?? '…'),
-        kv('fps', s.fps ?? '…'),
-        kv('realtime', s.realtime != null ? `${s.realtime}×` : '…'),
-        kv('infer', s.inferMs != null ? `${s.inferMs} ms` : '…'),
-        kv('pelvis z', s.pelvisHeight != null ? `${s.pelvisHeight} m` : '…'),
-        kv('upright', s.upright != null ? s.upright.toFixed(2) : '…'),
+        tm('realtime', s.realtime != null ? `${s.realtime}×` : '…', toneRealtime(s.realtime)),
+        tm('ctrl', s.controlHz != null ? `${s.controlHz} Hz` : '…'),
+        tm('fps', s.fps ?? '…'),
+        tm('infer', s.inferMs != null ? `${s.inferMs} ms` : '…'),
+        tm('upright', s.upright != null ? s.upright.toFixed(2) : '…', toneUpright(s.upright)),
+        tm('pelvis z', s.pelvisHeight != null ? `${s.pelvisHeight} m` : '…', tonePelvis(s.pelvisHeight)),
+        tm('frame', s.clipFrame != null ? `${s.clipFrame}/${s.clipFrames}` : '…'),
+        tm('obs', s.modelObsDim != null ? `${s.obsDim}/${s.modelObsDim}` : '…'),
+        tm('act', s.actionDim ?? '…'),
+        tm('load', s.loadMs != null ? `${s.loadMs} ms` : '…'),
       ].join('');
+      if (s.clipFrame != null && s.clipFrames) {
+        progressEl.style.width = `${((s.clipFrame / s.clipFrames) * 100).toFixed(1)}%`;
+      }
     },
   };
 }
 
-function kv(k: string, v: unknown): string {
-  return `<span class="spike__kv"><em>${k}</em>${v}</span>`;
+/** One telemetry readout: tracked micro-label over a tabular value. */
+function tm(k: string, v: unknown, tone = ''): string {
+  const attr = tone ? ` data-tone="${tone}"` : '';
+  return `<div class="tm"${attr}><span class="tm__k">${k}</span><span class="tm__v">${v}</span></div>`;
+}
+
+// Health tones for the live signals: green healthy → amber marginal → red bad.
+function toneRealtime(x: number | null): string {
+  if (x == null) return '';
+  return x >= 0.9 ? 'ok' : x >= 0.5 ? 'warn' : 'bad';
+}
+function toneUpright(x: number | null): string {
+  if (x == null) return '';
+  return x <= -0.85 ? 'ok' : x <= -0.5 ? 'warn' : 'bad';
+}
+function tonePelvis(x: number | null): string {
+  if (x == null) return '';
+  return x > 0.6 ? 'ok' : x >= 0.45 ? 'warn' : 'bad';
 }
 
 void main();
