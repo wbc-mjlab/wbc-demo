@@ -107,6 +107,9 @@
   background: var(--color-surface-hover);
   color: var(--color-accent);
 }
+.live__github svg {
+  display: block;
+}
 
 /* ---- Brand + live state -------------------------------------------------- */
 .live__brand {
