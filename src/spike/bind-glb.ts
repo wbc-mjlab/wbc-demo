@@ -17,7 +17,6 @@ import {
   Object3D,
   Quaternion,
   Vector3,
-  type Scene,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -111,12 +110,4 @@ export async function bindGlbToSim(opts: {
   }
 
   return { root, sync, unmatchedBodies };
-}
-
-/**
- * Reframe the camera/controls on a scene's bounding content. Small helper so the
- * spike page can frame the robot once the GLB is bound and stepped.
- */
-export function exposeScene(_scene: Scene): void {
-  /* no-op hook kept for symmetry; framing handled by the page. */
 }

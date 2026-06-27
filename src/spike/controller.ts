@@ -100,3 +100,33 @@ export function makePdHold(
     },
   };
 }
+
+/**
+ * Optional kinematic base-hold. The naive PD controller can't balance the free
+ * base, so the robot face-plants under gravity (which is itself a fine physics
+ * check). For a clean *standing* demo we can instead pin the free joint's qpos
+ * to its initial value and zero its qvel each step — the legs/arms still respond
+ * to PD + contact, but the pelvis stays put. The real policy (wbc-mjlab-5sq)
+ * will keep it standing for real; this is only a presentation aid.
+ *
+ * Free joint layout: qpos[0..2]=pos, qpos[3..6]=quat(w,x,y,z); qvel[0..5]=twist.
+ */
+export interface BaseHold {
+  apply(sim: MujocoSim): void;
+}
+
+export function makeBaseHold(sim: MujocoSim): BaseHold {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const qpos0: any = sim.data.qpos; // capture initial free-joint pose
+  const init = [qpos0[0], qpos0[1], qpos0[2], qpos0[3], qpos0[4], qpos0[5], qpos0[6]];
+  return {
+    apply(s: MujocoSim): void {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const qpos: any = s.data.qpos;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const qvel: any = s.data.qvel;
+      for (let i = 0; i < 7; i++) qpos[i] = init[i];
+      for (let i = 0; i < 6; i++) qvel[i] = 0;
+    },
+  };
+}

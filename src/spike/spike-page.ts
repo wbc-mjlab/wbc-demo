@@ -22,7 +22,7 @@ import { Viewer } from '../viewer/renderer';
 import { loadG1Sim, type MujocoSim } from './mujoco';
 import { bindGlbToSim, type GlbBinding } from './bind-glb';
 import { buildGeomRenderer, type GeomBinding } from './geom-renderer';
-import { makePdHold } from './controller';
+import { makePdHold, makeBaseHold } from './controller';
 
 const BASE = import.meta.env.BASE_URL;
 const MJCF_BASE = `${BASE}robots/g1/mjcf/`;
@@ -100,6 +100,8 @@ async function main(): Promise<void> {
     return;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).__sim = sim; // diagnostics hook (spike only)
   status.loadMs = Math.round(performance.now() - t0);
   status.nbody = sim.nbody;
   status.nq = sim.nq;
@@ -140,6 +142,13 @@ async function main(): Promise<void> {
 
   // Controller: PD-hold to default pose so the robot is actuated, not limp.
   const controller = makePdHold(sim, { kp: 80, kd: 4 });
+  // Base-hold (default ON) pins the free base for a clean standing demo; toggle
+  // OFF to watch the real free-base dynamics (robot falls under gravity).
+  const baseHold = makeBaseHold(sim);
+  let baseHeld = true;
+  ui.onBaseToggle((held) => {
+    baseHeld = held;
+  });
 
   // ---- Step + render loop --------------------------------------------------
   // Step physics to keep up with wall-clock at the model's dt, capped so a slow
@@ -163,6 +172,7 @@ async function main(): Promise<void> {
     while (acc >= dt && stepsThisFrame < maxSteps) {
       controller.apply(sim);
       sim.mujoco.mj_step(sim.model, sim.data);
+      if (baseHeld) baseHold.apply(sim);
       acc -= dt;
       stepsThisFrame += 1;
       stepCounter += 1;
@@ -256,6 +266,7 @@ function buildUi() {
       <header class="spike__bar">
         <strong>G1 · mujoco-wasm spike</strong>
         <span class="spike__status" id="spk-status">booting…</span>
+        <button id="spk-base" class="spike__btn">base: held</button>
         <button id="spk-toggle" class="spike__btn">render: GLB</button>
       </header>
       <div class="spike__viewport" id="spk-viewport"></div>
@@ -265,6 +276,7 @@ function buildUi() {
   const statusEl = root.querySelector<HTMLElement>('#spk-status')!;
   const metricsEl = root.querySelector<HTMLElement>('#spk-metrics')!;
   const toggleEl = root.querySelector<HTMLButtonElement>('#spk-toggle')!;
+  const baseEl = root.querySelector<HTMLButtonElement>('#spk-base')!;
   return {
     viewport,
     setStatus(s: string, err = false) {
@@ -276,6 +288,14 @@ function buildUi() {
     },
     onToggle(fn: () => void) {
       toggleEl.addEventListener('click', fn);
+    },
+    onBaseToggle(fn: (held: boolean) => void) {
+      let held = true;
+      baseEl.addEventListener('click', () => {
+        held = !held;
+        baseEl.textContent = `base: ${held ? 'held' : 'free'}`;
+        fn(held);
+      });
     },
     showMeta(s: SpikeStatus) {
       this.updateMetrics(s);

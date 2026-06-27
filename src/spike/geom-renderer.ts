@@ -202,9 +202,10 @@ function makeMeshGeometry(dataId: number, sim: MujocoSim): BufferGeometry {
   positions.set(allVerts.subarray(vertAdr * 3, (vertAdr + vertNum) * 3));
 
   const indices = new Uint32Array(faceNum * 3);
-  // Face indices are global vertex ids; subtract this mesh's vert base.
+  // MuJoCo `mesh_face` indices are MESH-LOCAL (in [0, vertnum)), so they map
+  // straight onto our per-mesh `positions` slice — do NOT subtract vertAdr.
   for (let i = 0; i < faceNum * 3; i++) {
-    indices[i] = allFaces[faceAdr * 3 + i] - vertAdr;
+    indices[i] = allFaces[faceAdr * 3 + i];
   }
 
   const geo = new BufferGeometry();
