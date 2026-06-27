@@ -362,13 +362,24 @@ function fail(msg: string): void {
 }
 
 function frameViewer(viewer: Viewer, target: import('three').Object3D): void {
+  // The geom meshes set matrixAutoUpdate=false, so their world matrices are
+  // stale until the first render. Force an update or the bbox collapses to the
+  // origin and the camera zooms into the feet.
+  target.updateWorldMatrix(true, true);
   const box = new Box3().setFromObject(target);
   if (box.isEmpty()) return;
   const size = box.getSize(new Vector3());
   const center = box.getCenter(new Vector3());
-  const radius = Math.max(size.x, size.y, size.z) || 1;
-  viewer.controls.target.copy(center);
-  viewer.camera.position.copy(center).add(new Vector3(radius * 1.4, radius * 0.5, radius * 1.8));
+  // Clamp the radius so a low first frame (lying clips) or a not-yet-synced
+  // bbox can't frame too tight; aim at the torso, not the ground.
+  const radius = Math.max(size.x, size.y, size.z, 1.1);
+  const targetY = Math.max(center.y, 0.7);
+  viewer.controls.target.set(center.x, targetY, center.z);
+  viewer.camera.position.set(
+    center.x + radius * 1.3,
+    targetY + radius * 0.55,
+    center.z + radius * 1.9,
+  );
   viewer.camera.near = radius / 100;
   viewer.camera.far = radius * 100;
   viewer.camera.updateProjectionMatrix();

@@ -150,6 +150,152 @@
         "walk",
         "locomotion"
       ]
+    },
+    {
+      "id": "dance_01",
+      "name": "Dance 01",
+      "file": "dance_01.bin",
+      "frames": 325,
+      "durationSec": 6.5,
+      "tags": [
+        "dance"
+      ]
+    },
+    {
+      "id": "dance_02",
+      "name": "Dance 02",
+      "file": "dance_02.bin",
+      "frames": 747,
+      "durationSec": 14.94,
+      "tags": [
+        "dance"
+      ]
+    },
+    {
+      "id": "dance_03",
+      "name": "Dance 03",
+      "file": "dance_03.bin",
+      "frames": 150,
+      "durationSec": 3.0,
+      "tags": [
+        "dance"
+      ]
+    },
+    {
+      "id": "fight_combo_02",
+      "name": "Fight Combo 02",
+      "file": "fight_combo_02.bin",
+      "frames": 477,
+      "durationSec": 9.54,
+      "tags": [
+        "fight"
+      ]
+    },
+    {
+      "id": "flip_01",
+      "name": "Flip 01",
+      "file": "flip_01.bin",
+      "frames": 382,
+      "durationSec": 7.64,
+      "tags": [
+        "flip"
+      ]
+    },
+    {
+      "id": "flip_02",
+      "name": "Flip 02",
+      "file": "flip_02.bin",
+      "frames": 384,
+      "durationSec": 7.68,
+      "tags": [
+        "flip"
+      ]
+    },
+    {
+      "id": "flip_03",
+      "name": "Flip 03",
+      "file": "flip_03.bin",
+      "frames": 347,
+      "durationSec": 6.94,
+      "tags": [
+        "flip"
+      ]
+    },
+    {
+      "id": "flip_04",
+      "name": "Flip 04",
+      "file": "flip_04.bin",
+      "frames": 372,
+      "durationSec": 7.44,
+      "tags": [
+        "flip"
+      ]
+    },
+    {
+      "id": "idle_02",
+      "name": "Idle 02",
+      "file": "idle_02.bin",
+      "frames": 249,
+      "durationSec": 4.98,
+      "tags": [
+        "idle"
+      ]
+    },
+    {
+      "id": "run_01",
+      "name": "Run 01",
+      "file": "run_01.bin",
+      "frames": 256,
+      "durationSec": 5.12,
+      "tags": [
+        "run",
+        "locomotion"
+      ]
+    },
+    {
+      "id": "sprint_01",
+      "name": "Sprint 01",
+      "file": "sprint_01.bin",
+      "frames": 551,
+      "durationSec": 11.02,
+      "tags": [
+        "sprint",
+        "run",
+        "locomotion"
+      ]
+    },
+    {
+      "id": "walk_01",
+      "name": "Walk 01",
+      "file": "walk_01.bin",
+      "frames": 411,
+      "durationSec": 8.22,
+      "tags": [
+        "walk",
+        "locomotion"
+      ]
+    },
+    {
+      "id": "walk_02",
+      "name": "Walk 02",
+      "file": "walk_02.bin",
+      "frames": 564,
+      "durationSec": 11.28,
+      "tags": [
+        "walk",
+        "locomotion"
+      ]
+    },
+    {
+      "id": "walk_03",
+      "name": "Walk 03",
+      "file": "walk_03.bin",
+      "frames": 554,
+      "durationSec": 11.08,
+      "tags": [
+        "walk",
+        "locomotion"
+      ]
     }
   ]
 }
