@@ -13,6 +13,9 @@ import './styles/live.css';
 import { getDefaultLivePolicy, getPolicy } from './registry';
 import { createLiveEngine, type EngineMode, type LiveStatus, type LiveEngineHandle } from './engine/live-engine';
 import type { ReferenceClip } from './engine/policy-config';
+import type { PolicyLinks } from './types';
+
+const DEMO_REPO_URL = 'https://github.com/wbc-mjlab/wbc-demo';
 
 let engine: LiveEngineHandle | undefined;
 let keyHandlerCleanup: (() => void) | undefined;
@@ -20,6 +23,15 @@ let keyHandlerCleanup: (() => void) | undefined;
 function galleryHref(): string {
   return `${import.meta.env.BASE_URL}gallery.html`;
 }
+
+function githubHref(links?: PolicyLinks): string {
+  for (const url of [links?.code, links?.paper]) {
+    if (url?.includes('github.com')) return url;
+  }
+  return links?.code ?? DEMO_REPO_URL;
+}
+
+const GITHUB_ICON = `<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.18.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.51-1.04 2.18-.82 2.18-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>`;
 
 function escapeHtml(value: string): string {
   return value
@@ -65,7 +77,7 @@ function render(): void {
   }
 
   root.classList.remove('page'); // full-bleed; drop the centered wrapper
-  const ui = buildUi(root, manifest.name);
+  const ui = buildUi(root, manifest.name, githubHref(manifest.links));
 
   const mjcfBaseUrl = `${import.meta.env.BASE_URL}robots/${robot}/mjcf/`;
   createLiveEngine(ui.viewport, {
@@ -91,7 +103,7 @@ function render(): void {
 }
 
 // ---- HUD + controls ---------------------------------------------------------
-function buildUi(root: HTMLElement, policyName: string) {
+function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
   root.innerHTML = `
     <div class="live" id="lv-root" data-state="boot">
       <div class="live__stage" id="lv-viewport"></div>
@@ -99,6 +111,7 @@ function buildUi(root: HTMLElement, policyName: string) {
 
       <header class="live__topbar">
         <a class="live__back" href="${galleryHref()}" title="All clips" aria-label="All clips">←</a>
+        <a class="live__back live__github" href="${escapeHtml(repoUrl)}" target="_blank" rel="noopener noreferrer" title="View on GitHub" aria-label="View on GitHub">${GITHUB_ICON}</a>
         <div class="live__brand">
           <span class="live__dot" aria-hidden="true"></span>
           <span class="live__wordmark">${escapeHtml(policyName)}</span>
