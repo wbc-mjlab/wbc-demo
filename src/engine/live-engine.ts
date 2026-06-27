@@ -120,6 +120,8 @@ export interface LiveEngineHandle {
   /** Re-frame the camera on the robot. */
   reframe(): void;
   setFollow(on: boolean): void;
+  /** Move the viewport canvas into a new container (engine-pool reuse). */
+  reparent(container: HTMLElement): void;
   dispose(): void;
 }
 
@@ -401,6 +403,7 @@ export async function createLiveEngine(
     },
     reframe() { frameViewer(); },
     setFollow(on: boolean) { follow = on; followInit = false; },
+    reparent(el: HTMLElement) { viewer.reparent(el); },
     dispose() {
       running = false;
       cancelAnimationFrame(rafId);

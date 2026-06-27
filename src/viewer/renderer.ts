@@ -73,7 +73,7 @@ export class Viewer {
    */
   readonly robotRoot: Group;
 
-  private readonly container: HTMLElement;
+  private container: HTMLElement;
   private readonly resizeObserver: ResizeObserver;
   private rafId = 0;
   private disposed = false;
@@ -216,6 +216,19 @@ export class Viewer {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
+  }
+
+  /**
+   * Move this viewport's canvas into a new container (engine-pool reuse): the
+   * gallery reassigns a fixed pool of viewers across many cards instead of
+   * spawning one WebGL context per card. Re-points the ResizeObserver + resizes.
+   */
+  reparent(container: HTMLElement): void {
+    this.resizeObserver.unobserve(this.container);
+    this.container = container;
+    container.appendChild(this.renderer.domElement);
+    this.resizeObserver.observe(container);
+    this.resize();
   }
 
   private animate = (): void => {

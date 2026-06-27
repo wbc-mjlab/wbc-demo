@@ -39,7 +39,9 @@ function render(): void {
   const root = document.querySelector<HTMLElement>('#app');
   if (!root) return;
 
-  const id = new URLSearchParams(window.location.search).get('id');
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get('id');
+  const startClip = params.get('clip') ?? undefined;
   const entry = id ? getPolicy(id) : undefined;
   if (!entry) {
     renderMessage(root, 'Policy not found',
@@ -70,6 +72,7 @@ function render(): void {
   createLiveEngine(ui.viewport, {
     policyBaseUrl: baseUrl,
     mjcfBaseUrl,
+    startClipId: startClip,
     follow: true,
     onMessage: (m) => ui.setStatus(m),
     onReady: (clips) => ui.populateClips(clips),
