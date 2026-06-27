@@ -236,7 +236,7 @@ export async function createLiveEngine(
 
   const startId =
     opts.startClipId ??
-    refIndex.clips.find((c) => c.id === 'walk1_subject1')?.id ??
+    refIndex.clips.find((c) => c.id === 'walk_01')?.id ??
     refIndex.clips[0]?.id;
   if (!startId) {
     const m = 'reference index has no clips';
