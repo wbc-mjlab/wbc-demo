@@ -1,5 +1,5 @@
 /**
- * Gallery landing page — a wall of LIVE clips.
+ * Clip gallery — a wall of LIVE thumbnails.
  *
  * Every clip of every live-capable policy gets its own card. Rather than spawn
  * one WebGL context per card (the browser caps ~16, and 30+ sims would melt the
@@ -7,7 +7,7 @@
  * you scroll it is reassigned to whichever cards are on-screen — moving its
  * canvas into the card and swapping the cheap per-clip reference stream
  * (`selectClip`, a ~50 ms fetch). Off-screen cards release their engine back to
- * the pool. Clicking a card opens the full per-policy page on that clip.
+ * the pool. Clicking a card opens the full demo on that clip.
  */
 
 import './styles/app.css';
@@ -43,10 +43,12 @@ const visible = new Set<ClipCard>();
 const booting = new Set<ClipCard>();
 let creating = 0;
 
-function policyClipHref(policyId: string, clipId: string): string {
+function demoHref(policyId: string, clipId: string): string {
   const b = import.meta.env.BASE_URL;
-  return `${b}policy.html?id=${encodeURIComponent(policyId)}&clip=${encodeURIComponent(clipId)}`;
+  const q = new URLSearchParams({ id: policyId, clip: clipId });
+  return `${b}?${q}`;
 }
+
 function isLiveCapable(entry: PolicyEntry): boolean {
   if (entry.id === EXAMPLE_ID) return false;
   return Boolean(entry.manifest.artifacts?.onnx) && (entry.manifest.robot ?? 'g1') === 'g1';
@@ -79,7 +81,7 @@ function clipCardHtml(policy: PolicyEntry, clip: { id: string; name: string; tag
   const tags = (clip.tags ?? []).slice(0, 3)
     .map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join('');
   return `
-    <a class="gcard" href="${policyClipHref(policy.id, clip.id)}" data-policy="${policy.id}" data-clip="${escapeHtml(clip.id)}">
+    <a class="gcard" href="${demoHref(policy.id, clip.id)}" data-policy="${policy.id}" data-clip="${escapeHtml(clip.id)}">
       <div class="gcard__stage"></div>
       <div class="gcard__overlay" aria-hidden="true"></div>
       <div class="gcard__bar">
@@ -96,8 +98,9 @@ function clipCardHtml(policy: PolicyEntry, clip: { id: string; name: string; tag
 function staticCardHtml(entry: PolicyEntry): string {
   const { manifest } = entry;
   const tags = (manifest.tags ?? []).map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join('');
+  const q = new URLSearchParams({ id: entry.id });
   return `
-    <a class="gcard" href="${import.meta.env.BASE_URL}policy.html?id=${entry.id}" data-id="${entry.id}">
+    <a class="gcard" href="${import.meta.env.BASE_URL}?${q}" data-id="${entry.id}">
       <div class="gcard__stage"></div>
       <div class="gcard__overlay" aria-hidden="true"></div>
       <div class="gcard__bar">
@@ -212,9 +215,11 @@ async function render(): Promise<void> {
   const root = document.querySelector<HTMLElement>('#app');
   if (!root) return;
   const policies = discoverPolicies();
+  const home = import.meta.env.BASE_URL;
 
   root.innerHTML = `
     <header class="site-header">
+      <p class="back-link"><a href="${home}">← demo</a></p>
       <h1>wbc-mjlab policy demos</h1>
       <p>
         Interactive in-browser whole-body control. Every card is a motion clip

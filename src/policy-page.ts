@@ -1,7 +1,8 @@
 /**
- * Per-policy page — the full live, interactive view.
+ * Live demo page — full-screen interactive view (site landing + deep links).
  *
- * Reads `?id=<policy>` from the URL, looks the policy up in the registry, and
+ * Opens at `/` with the default live policy and manifest default clip (idle),
+ * or reads `?id=<policy>&clip=<clip>` from the URL. Back arrow → clip gallery.
  * mounts the live WBC engine (src/engine/live-engine.ts) full-screen with the
  * telemetry-console HUD + the full control cluster: clip switch, play/pause,
  * reset, speed, policy/open-loop toggle, perturbation (push), and camera follow.
@@ -9,15 +10,15 @@
 
 import './styles/app.css';
 import './styles/live.css';
-import { getPolicy } from './registry';
+import { getDefaultLivePolicy, getPolicy } from './registry';
 import { createLiveEngine, type EngineMode, type LiveStatus, type LiveEngineHandle } from './engine/live-engine';
 import type { ReferenceClip } from './engine/policy-config';
 
 let engine: LiveEngineHandle | undefined;
 let keyHandlerCleanup: (() => void) | undefined;
 
-function homeHref(): string {
-  return import.meta.env.BASE_URL;
+function galleryHref(): string {
+  return `${import.meta.env.BASE_URL}gallery.html`;
 }
 
 function escapeHtml(value: string): string {
@@ -28,7 +29,7 @@ function escapeHtml(value: string): string {
 
 function renderMessage(root: HTMLElement, title: string, body: string): void {
   root.innerHTML = `
-    <p class="back-link"><a href="${homeHref()}">← All policies</a></p>
+    <p class="back-link"><a href="${galleryHref()}">← All clips</a></p>
     <h1>${escapeHtml(title)}</h1>
     <p class="policy-meta">${body}</p>`;
 }
@@ -38,12 +39,12 @@ function render(): void {
   if (!root) return;
 
   const params = new URLSearchParams(window.location.search);
-  const id = params.get('id');
+  const id = params.get('id') ?? getDefaultLivePolicy()?.id;
   const startClip = params.get('clip') ?? undefined;
   const entry = id ? getPolicy(id) : undefined;
   if (!entry) {
     renderMessage(root, 'Policy not found',
-      id ? `No policy with id <code>${escapeHtml(id)}</code>.` : 'No <code>id</code> given in the URL.');
+      id ? `No policy with id <code>${escapeHtml(id)}</code>.` : 'No live policy is available.');
     return;
   }
 
@@ -71,7 +72,7 @@ function render(): void {
     policyBaseUrl: baseUrl,
     mjcfBaseUrl,
     startClipId: startClip,
-    autoplay: false,
+    autoplay: true,
     follow: true,
     interactiveDrag: true,
     onMessage: (m) => ui.setStatus(m),
@@ -97,7 +98,7 @@ function buildUi(root: HTMLElement, policyName: string) {
       <div class="live__vignette" aria-hidden="true"></div>
 
       <header class="live__topbar">
-        <a class="live__back" href="${homeHref()}" title="All policies" aria-label="All policies">←</a>
+        <a class="live__back" href="${galleryHref()}" title="All clips" aria-label="All clips">←</a>
         <div class="live__brand">
           <span class="live__dot" aria-hidden="true"></span>
           <span class="live__wordmark">${escapeHtml(policyName)}</span>
