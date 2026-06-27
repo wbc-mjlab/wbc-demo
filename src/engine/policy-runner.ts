@@ -6,9 +6,9 @@
  * control step.
  *
  * Threading: we force `numThreads = 1` so ORT uses the SIMD-but-single-thread
- * wasm build. That needs NO SharedArrayBuffer, so NO COOP/COEP headers — the
- * same constraint that kept the mujoco-wasm spike deployable on plain GitHub
- * Pages. The G1 actor is tiny (132→29 MLP); 50 Hz is comfortable single-threaded.
+ * wasm build. That needs NO SharedArrayBuffer, so NO COOP/COEP headers — it
+ * stays deployable on plain GitHub Pages. The G1 actor is tiny (132→29 MLP);
+ * 50 Hz is comfortable single-threaded.
  */
 
 import * as ort from 'onnxruntime-web';

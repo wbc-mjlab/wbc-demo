@@ -1,5 +1,5 @@
 /* =============================================================================
- * Live engine page — "telemetry console" chrome (issue wbc-mjlab-uxq).
+ * Live engine page — "telemetry console" chrome.
  * =============================================================================
  *
  * A full-bleed MuJoCo + ONNX viewport with a floating glass HUD: a control bar
@@ -8,8 +8,6 @@
  * deep slate surfaces + signal-cyan accent. System font stacks only (no remote
  * fonts), so character comes from tracked uppercase mono micro-labels, hairline
  * glass borders, and a pulsing "live" signal rather than a display typeface.
- *
- * Kept separate from spike.css so the dev mujoco-wasm spike page is unaffected.
  */
 
 .live {

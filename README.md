@@ -1,80 +1,98 @@
 # wbc-demo
 
-Interactive in-browser demo for [wbc-mjlab](https://github.com/wbc-mjlab) WBC
-(whole-body-control) policies. A static **Vite + TypeScript + Three.js** site
-that shows a gallery of policies and a per-policy 3D viewport. Deploys to
-**GitHub Pages**.
+An interactive, in-browser showcase for [wbc-mjlab](https://github.com/wbc-mjlab)
+whole-body-control (WBC) policies. Every motion clip runs **live in the browser** —
+a real MuJoCo physics sim ([`@mujoco/mujoco`](https://www.npmjs.com/package/@mujoco/mujoco)
+WASM) stepped by the policy network ([onnxruntime-web](https://onnxruntime.ai/docs/get-started/with-javascript/web.html)),
+not a pre-rendered video. Built with **Vite + TypeScript + Three.js**, deployed as a
+static site to **GitHub Pages**.
 
-This repo is **data-driven**: the gallery is built from whatever policy folders
-are committed under [`policies/`](policies/). Adding a policy is a content PR,
-not a code change.
+- **Gallery** — a wall of cards, each a motion clip tracked live in its own sim.
+  Scroll to bring more to life; click one to dive in.
+- **Per-policy page** — full-screen viewport with live controls: clip switch,
+  speed, a policy/open-loop toggle, a "push" perturbation, and camera framing.
+- **Data-driven** — the gallery is built from whatever policy folders are committed
+  under [`policies/`](policies/). Adding a policy is a content PR, not a code change.
+- **No special headers** — inference runs on the single-threaded SIMD WASM backend
+  (`numThreads = 1`), so there's **no SharedArrayBuffer / COOP-COEP requirement** —
+  it deploys on plain GitHub Pages.
 
-## Develop
+## Quick start
 
 ```bash
-npm install      # install deps (generates package-lock.json — commit it)
-npm run dev      # start the Vite dev server (http://localhost:5173/wbc-demo/)
+npm install      # install deps
+npm run dev      # Vite dev server → http://localhost:5173/wbc-demo/
 npm run build    # type-check (tsc) + production build into dist/
 npm run preview  # serve the production build locally
 npm run validate # validate every policies/*/policy.yaml against the schema
 ```
 
-Requires Node ≥ 20.19 (or ≥ 22.12), per Vite 8.
+Requires Node ≥ 20.19 (or ≥ 22.12), per Vite 8. The site is served under the
+`/wbc-demo/` base path (set in `vite.config.ts`) to match the GitHub Pages project
+URL — that prefix is part of the dev URL too.
 
-> The site is served under the `/wbc-demo/` base path (set in
-> `vite.config.ts`) to match the GitHub Pages project URL, so the dev server
-> URL includes that prefix.
+## How it works
+
+Each control step (50 Hz), the engine ([`src/engine/live-engine.ts`](src/engine/live-engine.ts)):
+
+1. reads the current frame of the clip's **reference command** (a compact 39-dim
+   stream — see [`REFERENCE_STREAM.md`](REFERENCE_STREAM.md));
+2. assembles the full actor observation by concatenating that reference with live
+   proprioception from its own MuJoCo sim;
+3. runs `policy.onnx` → joint actions;
+4. maps actions to PD torques (`reference_residual` + `kp/kd`) and substeps physics.
+
+This pipeline is ported from the `wbc-g1-deploy` C++ runtime, so the browser tracks
+the same motions the real robot does. The gallery shares a small **pool of engines**
+across all cards — an engine is created lazily, then reassigned to whichever cards
+are on-screen (swapping only the cheap per-clip stream), keeping live WebGL contexts
+and CPU bounded no matter how many clips are shown.
 
 ## Adding a policy
 
-1. Create `policies/<policy-id>/` with a `policy.yaml` manifest (+ artifacts:
-   `policy.onnx`, `config.yaml`, clips, thumbnail).
+1. Create `policies/<policy-id>/` with a `policy.yaml` manifest plus its artifacts:
+   `policy.onnx`, `config.yaml`, a `reference/` clip stream, and a thumbnail.
 2. Run `npm run validate` to check the manifest against the schema.
-3. Open a PR. On merge to `main`, CI builds and the gallery picks it up
-   automatically — no code edits.
+3. Open a PR. On merge to `main`, CI builds and the gallery picks it up — no code edits.
 
-The full end-to-end onboarding path (train + export → drop folder → fill
-manifest → validate → PR) is in [`CONTRIBUTING.md`](CONTRIBUTING.md).
-See [`policies/README.md`](policies/README.md) for the folder layout and the
-full manifest field reference. The manifest contract is defined by
-[`policies/policy.schema.json`](policies/policy.schema.json) (JSON Schema) and
-mirrored by `PolicyManifest` in [`src/types.ts`](src/types.ts) (issue
-**wbc-mjlab-0d8**).
+The end-to-end path (train + export → drop folder → validate → PR) is in
+[`CONTRIBUTING.md`](CONTRIBUTING.md). The folder layout and full manifest field
+reference are in [`policies/README.md`](policies/README.md); the contract is defined
+by [`policies/policy.schema.json`](policies/policy.schema.json) and mirrored by
+`PolicyManifest` in [`src/types.ts`](src/types.ts).
 
 ## Project layout
 
 ```
 index.html / policy.html   # gallery + per-policy HTML entry points
-vite.config.ts             # base: '/wbc-demo/'; multi-page build
+vite.config.ts             # base '/wbc-demo/'; serves policies/ in dev; multi-page build
 src/
-  main.ts                  # gallery: renders a card per discovered policy
-  policy-page.ts           # per-policy view: mounts the Three.js viewport
+  main.ts                  # gallery: a live card per clip, shared engine pool
+  policy-page.ts           # per-policy full view: engine + control cluster + telemetry HUD
   registry.ts              # build-time discovery + schema validation of policies
-  validate-manifest.ts     # shared Ajv validator (registry + CI script use it)
-  types.ts                 # PolicyManifest contract (final — see wbc-mjlab-0d8)
-  viewer/renderer.ts       # shared Three.js viewport + M2 live-engine mount point
-  styles/tokens.css        # design tokens PLACEHOLDER (real palette: wbc-mjlab-cfd)
-  styles/app.css           # application styles
-scripts/validate.ts        # `npm run validate` — CI manifest gate (wbc-mjlab-2of)
-policies/                  # one folder per policy (data source for the gallery)
-  policy.schema.json       # JSON Schema for policy.yaml (authoritative contract)
-public/                    # static assets copied verbatim into the build
+  validate-manifest.ts     # shared Ajv validator (registry + CI script)
+  types.ts                 # PolicyManifest contract
+  engine/                  # the live engine
+    live-engine.ts         #   create/control loop: sim + policy + render, DOM-free
+    mujoco.ts              #   load + step the MuJoCo WASM model
+    policy-runner.ts       #   onnxruntime-web inference
+    policy-config.ts       #   config.yaml + reference-stream loaders
+    wbc-controller.ts      #   obs assembly + reference_residual action + PD torque
+    geom-renderer.ts       #   Three.js meshes driven from MuJoCo geom transforms
+  viewer/renderer.ts       # shared Three.js viewport (camera/lights/grid/controls)
+  styles/                  # tokens.css (org palette) + app.css + live.css (HUD)
+scripts/validate.ts        # `npm run validate` — manifest gate (also run in CI)
+policies/                  # one folder per policy (the gallery's data source)
+public/robots/g1/          # G1 MJCF + meshes (GLB) served to the engine
 .github/workflows/deploy.yml   # GitHub Pages build + deploy
 ```
 
-## Roadmap (relative to this scaffold)
-
-- **wbc-mjlab-cfd** — real design tokens / org palette → drop into `tokens.css`.
-- **wbc-mjlab-0d8** — manifest schema ✅ (`policies/policy.schema.json` + `src/types.ts`).
-- **wbc-mjlab-9as** — robot meshes (GLB); today the viewport shows a placeholder box.
-- **wbc-mjlab-3ne** — playback rendering of recorded clips in the viewport.
-- **M2** — live in-browser engine (mujoco-wasm + onnxruntime-web) at the
-  `mountLiveEngine()` seam in `src/viewer/renderer.ts`.
-
 ## Deployment
 
-Pushes to `main` trigger `.github/workflows/deploy.yml`, which builds the site
-and publishes `dist/` to GitHub Pages. One-time setup: in the repo settings,
-set **Settings → Pages → Source = GitHub Actions**.
+Pushes to `main` trigger [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml),
+which builds the site and publishes `dist/` to GitHub Pages. One-time setup:
+**Settings → Pages → Source = GitHub Actions**.
+
+---
 
 Part of the [wbc-mjlab](https://github.com/wbc-mjlab) project.

@@ -2,15 +2,13 @@
  * Thin wrapper around the official DeepMind MuJoCo WASM bindings
  * (`@mujoco/mujoco`, single-threaded build).
  *
- * SPIKE ONLY — de-risking issue wbc-mjlab-x2t. This proves we can load the
- * Unitree G1 MJCF + STL meshes into the Emscripten virtual filesystem, compile
- * the model, and step physics in the browser. It is deliberately isolated from
- * the gallery/playback code; the productionised engine (wbc-mjlab-uxq) will
- * fold the useful parts into `src/engine/`.
+ * Loads the Unitree G1 MJCF + STL meshes into the Emscripten virtual
+ * filesystem, compiles the model, and steps physics in the browser. The live
+ * engine (`live-engine.ts`) drives it; the renderer reads its body transforms.
  *
  * Why the single-threaded build: it needs NO COOP/COEP headers, so it works on
  * plain GitHub Pages. The `@mujoco/mujoco/mt` build is faster but requires
- * cross-origin isolation (SharedArrayBuffer) — out of scope for the spike.
+ * cross-origin isolation (SharedArrayBuffer); the tiny G1 actor doesn't need it.
  */
 
 import loadMujoco from '@mujoco/mujoco';

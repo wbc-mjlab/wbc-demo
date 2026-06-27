@@ -6,15 +6,13 @@
  * telemetry-console HUD + the full control cluster: clip switch, play/pause,
  * reset, speed, policy/open-loop toggle, perturbation (push), and camera
  * reframe. Policies without an ONNX artifact fall back to a metadata card.
- *
- * Issues: wbc-mjlab-e9w (controls), wbc-mjlab-g8h (wire engine into the page).
  */
 
 import './styles/app.css';
 import './styles/live.css';
 import { getPolicy } from './registry';
 import { createLiveEngine, type EngineMode, type LiveStatus, type LiveEngineHandle } from './engine/live-engine';
-import type { ReferenceClip } from './spike/policy-config';
+import type { ReferenceClip } from './engine/policy-config';
 
 let engine: LiveEngineHandle | undefined;
 

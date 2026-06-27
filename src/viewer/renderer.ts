@@ -1,16 +1,10 @@
 /**
  * Three.js viewport — the shared rendering core.
  *
- * This is the ONE place scene/camera/lights/grid/controls live. It is built to
- * be reused unchanged by:
- *   • the playback page          (issue wbc-mjlab-3ne) — swaps robot pose per
- *     frame from a recorded clip, and
- *   • the M2 live engine         (mujoco-wasm + onnxruntime-web) — drives the
- *     same robot mesh from a physics step + policy inference loop.
- *
- * Neither of those is implemented yet. The robot is a placeholder box until
- * real meshes exist (issue wbc-mjlab-9as), and the live engine attaches at the
- * documented `mountLiveEngine()` seam below.
+ * The ONE place scene/camera/lights/grid/controls live. The live engine
+ * (`src/engine/live-engine.ts`) constructs a Viewer, drops the placeholder, and
+ * drives the robot's body nodes under `robotRoot` from its physics step. Until
+ * the engine attaches its meshes the viewport shows a labelled placeholder box.
  */
 
 import {
@@ -68,8 +62,8 @@ export class Viewer {
 
   /**
    * The robot's root node. The placeholder box is parented here now; when real
-   * meshes land (wbc-mjlab-9as) the loaded GLTF scene is parented here instead.
-   * Playback (wbc-mjlab-3ne) and the live engine pose the children of this node.
+   * meshes land the loaded GLTF scene is parented here instead.
+   * Playback and the live engine pose the children of this node.
    */
   readonly robotRoot: Group;
 
@@ -169,7 +163,7 @@ export class Viewer {
   /**
    * Load the robot GLB if a URL is given AND it loads; otherwise fall back to a
    * labelled placeholder box. Robot meshes don't exist yet — tracked by
-   * issue **wbc-mjlab-9as** (robot mesh pending).
+   * issue **** (robot mesh pending).
    */
   private async loadRobot(robotUrl?: string): Promise<void> {
     if (robotUrl) {
@@ -185,7 +179,7 @@ export class Viewer {
     this.addPlaceholderRobot();
   }
 
-  /** Placeholder until real robot meshes exist (issue wbc-mjlab-9as). */
+  /** Placeholder until real robot meshes exist. */
   private addPlaceholderRobot(): void {
     const accent = token('--color-accent', '#5b8def');
     const box = new Mesh(
@@ -194,7 +188,7 @@ export class Viewer {
     );
     box.position.y = 0.8;
     box.name = 'placeholder-robot';
-    box.userData.note = 'robot mesh pending (issue wbc-mjlab-9as)';
+    box.userData.note = 'robot mesh pending';
     this.robotRoot.add(box);
   }
 
@@ -237,37 +231,6 @@ export class Viewer {
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   };
-
-  // ===========================================================================
-  // M2 LIVE-ENGINE MOUNT POINT — RESERVED. DO NOT BUILD THE ENGINE HERE.
-  // ===========================================================================
-  //
-  // In Milestone M2 the live, in-browser inference loop attaches here:
-  //
-  //   1. mujoco-wasm        — load the robot's MJCF/XML + assets, build the
-  //                           physics model, and step the simulation.
-  //   2. onnxruntime-web    — load `policy.onnx`, run inference each control
-  //                           step (obs → action) feeding mujoco's actuators.
-  //   3. bind               — map mujoco body/joint transforms onto
-  //                           `this.robotRoot`'s children each frame (the same
-  //                           node the GLB / placeholder lives under), so the
-  //                           viewport "just works" with no scene changes.
-  //
-  // Design intent: the engine is a SEPARATE module (e.g. src/engine/live.ts)
-  // that receives this Viewer instance and reads/writes `robotRoot`. Keep all
-  // wasm/ort plumbing OUT of this file — renderer.ts stays pure Three.js so the
-  // playback page (wbc-mjlab-3ne) and live engine share it unchanged.
-  //
-  // Signature is intentionally a stub; M2 will define the real engine handle.
-  /**
-   * Reserved seam for the M2 live engine. No-op today.
-   * @param _opts engine config (MJCF url, onnx url, control rate, …) — TBD in M2.
-   * @returns a teardown handle once implemented; `undefined` for now.
-   */
-  mountLiveEngine(_opts?: unknown): undefined {
-    console.info('[viewer] mountLiveEngine() is a stub — live engine arrives in M2.');
-    return undefined;
-  }
 
   /** Free GL resources and listeners. Call on page teardown. */
   dispose(): void {

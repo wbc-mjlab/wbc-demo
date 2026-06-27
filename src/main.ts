@@ -8,15 +8,13 @@
  * canvas into the card and swapping the cheap per-clip reference stream
  * (`selectClip`, a ~50 ms fetch). Off-screen cards release their engine back to
  * the pool. Clicking a card opens the full per-policy page on that clip.
- *
- * Issues: wbc-mjlab-g8h (gallery), wbc-mjlab-e9w (engine controls reused here).
  */
 
 import './styles/app.css';
 import './styles/live.css';
 import { discoverPolicies } from './registry';
 import { createLiveEngine, type LiveEngineHandle } from './engine/live-engine';
-import { loadReferenceIndex } from './spike/policy-config';
+import { loadReferenceIndex } from './engine/policy-config';
 import type { PolicyEntry } from './types';
 
 const EXAMPLE_ID = '_example';

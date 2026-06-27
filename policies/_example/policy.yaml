@@ -6,14 +6,13 @@
 # Delete `policies/_example/` once the first real policy lands. The registry
 # (src/registry.ts) treats the `_example` id specially and sorts it last.
 #
-# This file is the FINAL schema (issue wbc-mjlab-0d8). It is validated against
-# policies/policy.schema.json by both the gallery build and `npm run validate`.
-# See policies/README.md for the full field reference and folder layout.
+# Validated against policies/policy.schema.json by both the gallery build and
+# `npm run validate`. See policies/README.md for the full field reference.
 #
-# NOTE: the artifact pointers below (onnx/config/clips/thumbnail) are shown for
-# documentation. The schema validates the manifest TEXT, not file existence, so
-# this example validates even though `_example/` ships no real artifacts. A REAL
-# policy folder must actually contain the files it points at.
+# NOTE: the artifact pointers below are shown for documentation. The schema
+# validates the manifest TEXT, not file existence, so this example validates
+# even though `_example/` ships no real artifacts. A REAL policy folder must
+# actually contain the files it points at (and `robot: g1` to run live).
 
 schemaVersion: "1"          # required — manifest schema version (currently "1")
 
@@ -21,12 +20,12 @@ schemaVersion: "1"          # required — manifest schema version (currently "1
 name: "Example Policy"       # required — display name on the card and page
 description: "Placeholder so the gallery isn't empty. Remove me once a real policy is added."
 
-robot: "g1"                  # optional — embodiment id; matches config.yaml's
-                             #   robot_id / motion_library.yaml's robot. Selects
-                             #   the robot GLB (issue wbc-mjlab-9as).
+robot: "g1"                  # optional — embodiment id; selects the shared robot
+                             #   assets in public/robots/<robot>/. Live rendering
+                             #   currently supports g1.
 
 tags: ["walk", "locomotion", "example"]   # optional — known tags suggested
-                                          #   (walk/run/fight/flip/getup/dance/…),
+                                          #   (walk/run/fight/flip/dance/…),
                                           #   arbitrary tags allowed.
 
 author: "wbc-mjlab"          # optional — contributor name or handle
@@ -51,32 +50,20 @@ camera:
 # camera: default            # ...or just a preset name.
 
 # Pointers to the policy's machine artifacts (emitted by the exporter,
-# issue wbc-mjlab-5uw). Paths are RELATIVE to this folder. Optional for an M1
-# metadata-only card; required for the M2 live engine.
+# wbc-mjlab-export-web-reference). Paths are RELATIVE to this folder.
+#   - onnx   (required within `artifacts`) — the trained network the engine runs.
+#   - config — deploy obs/action layout (schema_version: wbc_tracking_params_v1).
+# The live engine also reads `reference/index.json` from the folder for its clip
+# list; that file is produced by the exporter alongside the per-clip .bin streams
+# (see ../../REFERENCE_STREAM.md), so it isn't listed here.
 artifacts:
-  onnx: "policy.onnx"        # required within `artifacts` — the trained network
-  config: "config.yaml"      # optional — deploy obs/action layout
-                             #   (schema_version: wbc_tracking_params_v1); the
-                             #   M2 engine consumes it.
+  onnx: "policy.onnx"
+  config: "config.yaml"
 
-  # Clips for playback (issue wbc-mjlab-3ne). Pick ONE form:
-  #
-  # (A) inline — a small, hand-curated showcase set with display metadata:
-  clips:
-    kind: inline
-    clips:
-      - id: "walk-forward"
-        name: "Walk forward"
-        file: "clips/walk-forward.json"
-        tags: ["walk"]
-        durationSec: 4.0
-      - id: "turn-left"
-        name: "Turn left"
-        file: "clips/turn-left.json"
-  #
-  # (B) manifest — point at a motion_library.yaml (schema:
-  #     wbc_motion_library_v1) and let per-clip names/files resolve from it.
-  #     Best for the exporter's bulk output (don't copy the clip list in here):
+  # Optional `clips` metadata (a curated inline list, or a pointer to a
+  # motion_library.yaml). The gallery/picker source their clips from
+  # reference/index.json, so this block is informational — omit it unless you
+  # want to annotate a curated subset.
   #
   # clips:
   #   kind: manifest

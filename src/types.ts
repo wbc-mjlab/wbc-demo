@@ -1,7 +1,7 @@
 /**
  * Policy manifest types — the frontend contract for `policies/<id>/policy.yaml`.
  *
- * This is the FINAL schema (issue wbc-mjlab-0d8). It is mirrored by the JSON
+ * This is the FINAL schema. It is mirrored by the JSON
  * Schema in `policies/policy.schema.json`, which is the authoritative validator
  * used by `src/registry.ts` (build-time, skip+warn) and `npm run validate`
  * (CI, exit non-zero). Keep the two in sync: this file is the TypeScript view of
@@ -15,7 +15,7 @@
  *   • a clip set     — either inline clip metadata, or a pointer to a
  *                      `motion_library.yaml` (`schema: wbc_motion_library_v1`).
  *   • a thumbnail    — gallery card image.
- * These artifacts are emitted per-policy by the exporter (issue wbc-mjlab-5uw);
+ * These artifacts are emitted per-policy by the exporter;
  * THIS schema defines the folder contract the exporter must honor.
  *
  * @see policies/README.md          — folder layout + authoring guide
@@ -79,7 +79,7 @@ export type PolicyCamera = CameraPreset | CameraPose;
 
 /**
  * A single playback clip, authored inline in the manifest. Used by the gallery
- * playback page (issue wbc-mjlab-3ne) for the clip picker + scrubbing.
+ * playback page for the clip picker + scrubbing.
  */
 export interface PolicyClip {
   /** Stable, URL-safe clip id. Matches an entry in the motion library. */
@@ -89,7 +89,7 @@ export interface PolicyClip {
   /**
    * Path to the clip's playback data, relative to the policy folder
    * (`policies/<id>/`). Resolved against the policy's base URL at load time.
-   * Format is owned by wbc-mjlab-3ne (likely a packed qpos/state trajectory).
+   * Format is owned by (likely a packed qpos/state trajectory).
    */
   file: string;
   /** Optional per-clip skill tags. */
@@ -113,7 +113,7 @@ export interface PolicyClip {
  *
  * The `manifest` form intentionally carries only a `file` pointer (+ optional
  * `default`): per-clip display names/files are resolved from the referenced
- * `motion_library.yaml` at load time (wbc-mjlab-3ne), keeping `policy.yaml`
+ * `motion_library.yaml` at load time, keeping `policy.yaml`
  * free of duplicated clip data.
  */
 export type PolicyClips =
@@ -130,7 +130,7 @@ export type PolicyClips =
 /**
  * Per-policy artifact pointers. All paths are RELATIVE to the policy folder
  * (`policies/<id>/`) and resolved against the folder's published URL at
- * runtime. These name the machine artifacts the exporter (wbc-mjlab-5uw) drops
+ * runtime. These name the machine artifacts the exporter drops
  * next to the manifest — the manifest references them, never inlines them.
  */
 export interface PolicyArtifacts {
@@ -175,7 +175,7 @@ export interface PolicyManifest {
   /**
    * Robot/embodiment id, e.g. "g1". Matches the exporter's `robot_id` in
    * `config.yaml` and `robot` in `motion_library.yaml`. Drives which GLB the
-   * viewer loads (issue wbc-mjlab-9as). Optional until robot meshes exist.
+   * viewer loads. Optional until robot meshes exist.
    */
   robot?: string;
 

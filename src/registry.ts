@@ -9,7 +9,7 @@
  *     No code edits here.
  *
  * @see policies/README.md         — folder layout
- * @see types.ts                   — manifest shape (wbc-mjlab-0d8, final)
+ * @see types.ts                   — manifest shape (, final)
  * @see policies/policy.schema.json — schema validated against here
  */
 
@@ -50,7 +50,7 @@ function folderIdFromPath(path: string): string {
  * (e.g. `/wbc-demo/` → `/wbc-demo/policies/<id>/`). Manifest-relative artifact
  * paths (thumbnail, clips, onnx) resolve against this at runtime.
  *
- * ⚠️ EMISSION CAVEAT (for wbc-mjlab-3ne / M2): manifests are INLINED at build
+ * ⚠️ EMISSION CAVEAT (for / M2): manifests are INLINED at build
  * time (see the glob above), but Vite does NOT copy the root-level `policies/`
  * tree into `dist/` — only `public/` is copied verbatim. So the *other*
  * artifacts (thumbnails, clips, onnx) are NOT yet served at the URLs returned

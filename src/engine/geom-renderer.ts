@@ -1,14 +1,12 @@
 /**
- * Render path B (COMPARISON): MuJoCo's own geom renderer.
+ * Geom renderer — Three.js meshes driven straight from the compiled MuJoCo model.
  *
- * SPIKE ONLY — issue wbc-mjlab-x2t. Instead of reusing the project's GLB, this
- * builds Three.js meshes straight from the COMPILED model's geoms — primitive
- * types (sphere/capsule/cylinder/box/plane) plus actual mesh buffers
+ * Builds one mesh per visual geom from the model's geom types — primitives
+ * (sphere/capsule/cylinder/box/plane) plus actual mesh buffers
  * (`model.mesh_vert` / `model.mesh_face`) for `mjGEOM_MESH`. Each frame it reads
  * `data.geom_xpos` / `data.geom_xmat` (per-geom world transform) and updates the
- * matrices. This is the same approach zalo/mujoco_wasm's Three.js demo uses.
- *
- * We render this side-by-side with the GLB path so the report can recommend one.
+ * matrices. (Same approach as zalo/mujoco_wasm's Three.js demo.) The engine uses
+ * this rather than a baked GLB — it's crisper and needs no separate mesh asset.
  */
 
 import {

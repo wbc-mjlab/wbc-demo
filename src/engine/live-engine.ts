@@ -7,15 +7,14 @@
  * camera). Both the per-policy page and the gallery's live cards drive it; the
  * UI chrome lives in the page, not here.
  *
- * Extracted from the tracer-bullet spike (`spike/live-page.ts`, issue
- * wbc-mjlab-uxq); see that file's header for the loop math + timing rationale.
- * Issues: wbc-mjlab-e9w (controls), wbc-mjlab-g8h (per-policy page + gallery).
+ * Distilled from the original tracer-bullet spike (since removed); the loop
+ * math + training-parity timing rationale live inline below.
  */
 
 import { Box3, Vector3 } from 'three';
 import { Viewer } from '../viewer/renderer';
-import { loadG1Sim, type MujocoSim } from '../spike/mujoco';
-import { buildGeomRenderer, type GeomBinding } from '../spike/geom-renderer';
+import { loadG1Sim, type MujocoSim } from './mujoco';
+import { buildGeomRenderer, type GeomBinding } from './geom-renderer';
 import {
   loadPolicyConfig,
   loadReferenceIndex,
@@ -24,9 +23,9 @@ import {
   type ReferenceClip,
   type ReferenceIndex,
   type ReferenceStream,
-} from '../spike/policy-config';
-import { loadPolicy, type PolicyRunner } from '../spike/policy-runner';
-import { makeWbcController, type WbcController } from '../spike/wbc-controller';
+} from './policy-config';
+import { loadPolicy, type PolicyRunner } from './policy-runner';
+import { makeWbcController, type WbcController } from './wbc-controller';
 
 // Training-parity physics timing (wbc-mjlab SimulationCfg / MujocoCfg).
 const PHYS_TIMESTEP = 0.005;

@@ -1,7 +1,6 @@
 # Reference Stream Format (`wbc_reference_stream_v1`)
 
-The per-clip **reference command** the in-browser live policy needs (issues
-wbc-mjlab-bpu obs-port, wbc-mjlab-uxq loop). Produced by wbc-mjlab's
+The per-clip **reference command** the in-browser live policy needs ( obs-port, loop). Produced by wbc-mjlab's
 `wbc-mjlab-export-web-reference`. The browser runs `policy.onnx` live and builds
 the full actor observation by concatenating this reference stream with live
 proprioception from its own sim — this format ships ONLY the reference terms.
@@ -62,5 +61,5 @@ Fidelity: matches mjlab's `MotionCommand` and the deploy C++ `WbcMotionLoader`
 > The full actor observation the policy consumes is this reference stream **+**
 > live proprioception (`base_ang_vel`, `projected_gravity`, `joint_pos`,
 > `joint_vel`, last `actions`) from the in-browser sim, concatenated in
-> `config.yaml` `tracking.actor_observation_names` order. See the obs-port issue
-> wbc-mjlab-bpu (ported from `wbc-g1-deploy`).
+> `config.yaml` `tracking.actor_observation_names` order (ported from the
+> `wbc-g1-deploy` C++ runtime).

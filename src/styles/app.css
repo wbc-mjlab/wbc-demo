@@ -1,6 +1,5 @@
-/* Application styles. Visual values come from tokens.css (placeholder today;
- * wbc-mjlab-cfd supplies the real palette). Reference tokens via var() — do not
- * hard-code colors/spacing here. */
+/* Application styles. Visual values come from tokens.css — reference tokens via
+ * var(); do not hard-code colors/spacing here. */
 
 @import './tokens.css';
 
@@ -178,7 +177,7 @@ a:hover {
   font-size: 0.9rem;
 }
 
-/* --- Live gallery cards (wbc-mjlab-g8h) ------------------------------------ */
+/* --- Live gallery cards ------------------------------------ */
 .gallery--live {
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
 }

@@ -1,8 +1,8 @@
 /**
  * The live WBC tracking controller — the in-browser port of `wbc-g1-deploy`.
  *
- * This is the heart of issues wbc-mjlab-bpu (obs/action/PD port) and
- * wbc-mjlab-uxq (close the loop). Each 50 Hz control step it:
+ * This is the heart of  (obs/action/PD port) and
+ * (close the loop). Each 50 Hz control step it:
  *
  *   1. reads the current reference frame from the .bin stream (39 dims),
  *   2. reads live proprioception from the mujoco-wasm sim (base ang vel,
