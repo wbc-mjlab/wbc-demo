@@ -6,6 +6,10 @@ every `policies/<id>/policy.yaml` at build time (see
 [`src/registry.ts`](../src/registry.ts)) and renders a gallery card + a
 per-policy page for each one.
 
+> New here? [`../CONTRIBUTING.md`](../CONTRIBUTING.md) walks the full onboarding
+> path (export from wbc-mjlab → drop folder → validate → PR). This file is the
+> folder-layout + manifest field reference.
+
 ## Folder layout
 
 ```

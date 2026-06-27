@@ -33,6 +33,8 @@ Requires Node ≥ 20.19 (or ≥ 22.12), per Vite 8.
 3. Open a PR. On merge to `main`, CI builds and the gallery picks it up
    automatically — no code edits.
 
+The full end-to-end onboarding path (train + export → drop folder → fill
+manifest → validate → PR) is in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 See [`policies/README.md`](policies/README.md) for the folder layout and the
 full manifest field reference. The manifest contract is defined by
 [`policies/policy.schema.json`](policies/policy.schema.json) (JSON Schema) and
