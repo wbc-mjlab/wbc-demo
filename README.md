@@ -1,5 +1,7 @@
 # wbc-demo
 
+**▶ Live demo: https://wbc-mjlab.github.io/wbc-demo/**
+
 An interactive, in-browser showcase for [wbc-mjlab](https://github.com/wbc-mjlab)
 whole-body-control (WBC) policies. Every motion clip runs **live in the browser** —
 a real MuJoCo physics sim ([`@mujoco/mujoco`](https://www.npmjs.com/package/@mujoco/mujoco)
