@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    /* Language / module target — modern, browser-only, bundler-resolved. */
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+
+    /* Vite handles emit; tsc is used for type-checking only (see `npm run build`). */
+    "noEmit": true,
+    "isolatedModules": true,
+    "useDefineForClassFields": true,
+
+    /* Strictness. */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+
+    /* Interop. */
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+
+    /* Vite client types (import.meta.glob, ?raw imports, import.meta.env) plus
+     * Node types for vite.config.ts (node:path, __dirname). */
+    "types": ["vite/client", "node"]
+  },
+  "include": ["src", "vite.config.ts"]
+}

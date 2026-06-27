@@ -1,0 +1,23 @@
+{
+  "name": "wbc-demo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Interactive in-browser demo for wbc-mjlab WBC policies (Three.js + mujoco-wasm + onnxruntime-web).",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "js-yaml": "^5.2.0",
+    "three": "^0.185.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "@types/three": "^0.185.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.0"
+  }
+}

@@ -1,0 +1,14 @@
+# EXAMPLE POLICY — REMOVABLE PLACEHOLDER.
+#
+# This folder exists only so the gallery renders something before any real
+# policy is committed. Delete `policies/_example/` once the first real policy
+# lands. The registry (src/registry.ts) treats the `_example` id as the example
+# and sorts it last.
+#
+# Schema is INTERIM — see policies/README.md and issue wbc-mjlab-0d8.
+
+name: "Example Policy"
+description: "Placeholder so the gallery isn't empty. Remove me once a real policy is added."
+tags: ["example"]
+# robot, onnx, thumbnail, clips intentionally omitted — the viewport falls back
+# to a placeholder box (robot mesh pending, issue wbc-mjlab-9as).

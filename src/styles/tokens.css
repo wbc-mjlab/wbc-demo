@@ -1,0 +1,52 @@
+/* =============================================================================
+ * DESIGN TOKENS — wbc-mjlab org palette.
+ * =============================================================================
+ *
+ * Source: docs/reports/2026-06-27-1240-org-brand-style.html (issue wbc-mjlab-cfd),
+ * pixel-sampled from the org's own assets (wbc_g1_collage.gif sim-scene slate +
+ * the studio screenshot). Surfaces/neutrals are OBSERVED; the cyan accent and
+ * amber are inferred brand proposals. Keep custom-property NAMES stable — every
+ * component + renderer.ts (reads --color-* via getComputedStyle) depends on them.
+ */
+
+:root {
+  /* --- Surfaces (observed: deep blue-slate, zero saturation) ------------ */
+  --color-bg: #0d1620;            /* page background */
+  --color-surface: #16232f;       /* cards, panels */
+  --color-surface-hover: #1d2e3d; /* card hover */
+  --color-border: #233444;        /* hairlines, card borders */
+
+  /* --- Text (observed neutrals) ----------------------------------------- */
+  --color-text: #e3edf6;          /* primary text */
+  --color-text-muted: #8fa0b3;    /* secondary text, captions */
+
+  /* --- Accent (inferred: signal cyan = live/active) --------------------- */
+  --color-accent: #36cfe0;        /* links, primary actions, robot placeholder */
+  --color-accent-hover: #5fdcea;
+
+  /* --- Secondary + semantic (for M2 controls: playback, status) --------- */
+  --color-amber: #e6a23c;         /* playback / clip selection */
+  --color-success: #4fc78a;       /* policy on, healthy */
+  --color-danger: #ef6a6a;        /* errors, reset, perturbation */
+
+  /* --- 3D viewport (the literal org sim-scene slate, deepened) ---------- */
+  --color-viewport-bg: #16283a;   /* Three.js scene clear color */
+  --color-grid-major: #2f4258;    /* grid helper major lines */
+  --color-grid-minor: #1c2c3a;    /* grid helper minor lines */
+
+  /* --- Type (system / self-hostable stacks; no remote font CDN) --------- */
+  --font-display: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+  /* --- Spacing / shape -------------------------------------------------- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 1rem;
+  --space-4: 1.5rem;
+  --space-5: 2.5rem;
+  --radius: 10px;
+
+  /* --- Layout ----------------------------------------------------------- */
+  --content-max: 1100px;
+}
