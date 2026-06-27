@@ -11,7 +11,15 @@
  * math + training-parity timing rationale live inline below.
  */
 
-import { Box3, Vector3 } from 'three';
+import {
+  Box3,
+  BufferGeometry,
+  Line,
+  LineBasicMaterial,
+  Raycaster,
+  Vector2,
+  Vector3,
+} from 'three';
 import { Viewer } from '../viewer/renderer';
 import { loadG1Sim, type MujocoSim } from './mujoco';
 import { buildGeomRenderer, type GeomBinding } from './geom-renderer';
@@ -89,6 +97,8 @@ export interface LiveEngineOptions {
   follow?: boolean;
   /** Cheaper viewport for many simultaneous instances (gallery cards). */
   lowQuality?: boolean;
+  /** Enable click-drag-to-perturb on the robot (per-policy page). */
+  interactiveDrag?: boolean;
   /** Called ~once/second with a fresh status snapshot. */
   onStatus?: (s: Readonly<LiveStatus>) => void;
   /** Called once the clip list is known (for building a picker). */
@@ -201,6 +211,126 @@ export async function createLiveEngine(
   });
   const controller: WbcController = makeWbcController({ sim, cfg, policy });
 
+  // ---- interactive drag-to-perturb (GEAR-SONIC style) ----------------------
+  // Click-drag a body to apply a spring force toward the cursor, written to
+  // MuJoCo's `data.xfrc_applied` (per-body, world frame). Grabbing the robot
+  // suppresses orbit (capture-phase + stopPropagation beats OrbitControls);
+  // dragging empty space orbits as usual.
+  const raycaster = new Raycaster();
+  const ndc = new Vector2();
+  const targetThree = new Vector3(); // drag target, three.js world
+  const bodyThree = new Vector3();
+  let grabBody = -1;
+  let grabDist = 0;
+  let dragLine: Line | null = null;
+  let detachDrag: (() => void) | null = null;
+
+  function rayTargetThree(e: PointerEvent): void {
+    const rect = viewer.renderer.domElement.getBoundingClientRect();
+    ndc.set(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    raycaster.setFromCamera(ndc, viewer.camera);
+    targetThree.copy(raycaster.ray.origin).addScaledVector(raycaster.ray.direction, grabDist);
+  }
+
+  function setupDrag(): void {
+    const el = viewer.renderer.domElement;
+    const geom = new BufferGeometry().setFromPoints([new Vector3(), new Vector3()]);
+    const mat = new LineBasicMaterial({ color: 0x36cfe0, depthTest: false, transparent: true });
+    dragLine = new Line(geom, mat);
+    dragLine.visible = false;
+    dragLine.frustumCulled = false;
+    dragLine.renderOrder = 999;
+    viewer.scene.add(dragLine);
+
+    const onDown = (e: PointerEvent): void => {
+      if (e.button !== 0) return;
+      robot.root.updateWorldMatrix(true, true);
+      const rect = el.getBoundingClientRect();
+      ndc.set(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      raycaster.setFromCamera(ndc, viewer.camera);
+      const hit = raycaster.intersectObjects(robot.pickMeshes, false)[0];
+      const bid = hit?.object.userData.bodyId as number | undefined;
+      if (hit && bid != null && bid >= 1) {
+        grabBody = bid;
+        grabDist = hit.distance;
+        targetThree.copy(hit.point);
+        viewer.controls.enabled = false;
+        if (dragLine) dragLine.visible = true;
+        try { el.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
+        e.stopPropagation(); // capture phase → beats OrbitControls' pointerdown
+      }
+    };
+    const onMove = (e: PointerEvent): void => {
+      if (grabBody >= 0) rayTargetThree(e);
+    };
+    const onUp = (e: PointerEvent): void => {
+      if (grabBody < 0) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const xfrc: any = sim.data.xfrc_applied;
+      for (let i = 0; i < 6; i++) xfrc[grabBody * 6 + i] = 0;
+      grabBody = -1;
+      viewer.controls.enabled = true;
+      if (dragLine) dragLine.visible = false;
+      try { el.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+    };
+
+    el.addEventListener('pointerdown', onDown, true);
+    el.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    detachDrag = () => {
+      el.removeEventListener('pointerdown', onDown, true);
+      el.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      if (dragLine) {
+        viewer.scene.remove(dragLine);
+        dragLine.geometry.dispose();
+        (dragLine.material as LineBasicMaterial).dispose();
+      }
+    };
+  }
+
+  /** Each frame: spring the grabbed body toward the cursor via xfrc_applied. */
+  function applyDrag(): void {
+    if (grabBody < 0) return;
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const xpos: any = sim.data.xpos;
+    const xfrc: any = sim.data.xfrc_applied;
+    const mass = (sim.model.body_mass as any)[grabBody] as number;
+    /* eslint-enable @typescript-eslint/no-explicit-any */
+    const bx = xpos[grabBody * 3] as number;
+    const by = xpos[grabBody * 3 + 1] as number;
+    const bz = xpos[grabBody * 3 + 2] as number;
+    // Drag target three (X,Y,Z) → MuJoCo Z-up (X, -Z, Y).
+    const tx = targetThree.x;
+    const ty = -targetThree.z;
+    const tz = targetThree.y;
+    const K = 120; // spring stiffness, N per (kg·m)
+    const maxF = 800;
+    let fx = K * mass * (tx - bx);
+    let fy = K * mass * (ty - by);
+    let fz = K * mass * (tz - bz);
+    const m = Math.hypot(fx, fy, fz);
+    if (m > maxF) { const s = maxF / m; fx *= s; fy *= s; fz *= s; }
+    xfrc[grabBody * 6] = fx;
+    xfrc[grabBody * 6 + 1] = fy;
+    xfrc[grabBody * 6 + 2] = fz;
+    if (dragLine) {
+      bodyThree.set(bx, bz, -by); // MuJoCo → three
+      const pos = dragLine.geometry.getAttribute('position');
+      pos.setXYZ(0, bodyThree.x, bodyThree.y, bodyThree.z);
+      pos.setXYZ(1, targetThree.x, targetThree.y, targetThree.z);
+      pos.needsUpdate = true;
+    }
+  }
+
+  if (opts.interactiveDrag) setupDrag();
+
   // ---- clip + run state ----------------------------------------------------
   let stream: ReferenceStream;
   let clipFrame = 0;
@@ -287,6 +417,8 @@ export async function createLiveEngine(
     last = now;
     if (elapsed > 0.1) elapsed = 0.1;
     acc += elapsed * speed;
+
+    applyDrag(); // set xfrc_applied before stepping so mj_step sees the drag force
 
     if (!stepping && acc >= policyDt) {
       stepping = true;
@@ -406,6 +538,7 @@ export async function createLiveEngine(
     dispose() {
       running = false;
       cancelAnimationFrame(rafId);
+      detachDrag?.();
       viewer.dispose();
     },
   };

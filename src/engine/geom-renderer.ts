@@ -46,13 +46,15 @@ export interface GeomBinding {
   readonly root: Group;
   sync(sim: MujocoSim): void;
   readonly geomCount: number;
+  /** The built meshes (visual geoms), each tagged `userData.bodyId`, for raycast picking. */
+  readonly pickMeshes: Mesh[];
 }
 
 /**
- * Build a Three.js mesh per visible geom. We render only the VISUAL geoms
- * (group 1/2 — the pretty meshes) so it's a fair visual comparison with the GLB
- * path; collision primitives are skipped. The wrapper group carries the single
- * Z-up→Y-up conversion just like the GLB path.
+ * Build a Three.js mesh per visible geom. Renders only the VISUAL geoms
+ * (group 1/2 — the pretty meshes); collision primitives are skipped. The wrapper
+ * group carries the single Z-up→Y-up conversion. Each mesh records its MuJoCo
+ * `body id` in `userData.bodyId` so the drag interaction can pick a body.
  */
 export function buildGeomRenderer(opts: {
   sim: MujocoSim;
@@ -71,6 +73,7 @@ export function buildGeomRenderer(opts: {
   const geomRgba: any = m.geom_rgba; // [ngeom*4]
   const geomGroup: any = m.geom_group;
   const geomDataId: any = m.geom_dataid; // mesh id, or -1
+  const geomBodyId: any = m.geom_bodyid; // owning body id per geom
   /* eslint-enable @typescript-eslint/no-explicit-any */
   const include = opts.includeGroups ?? new Set([1, 2]);
 
@@ -80,6 +83,7 @@ export function buildGeomRenderer(opts: {
 
   // Per-geom Three.js mesh, indexed by geom id (null for skipped geoms).
   const meshes: Array<Mesh | null> = new Array(ngeom).fill(null);
+  const pickMeshes: Mesh[] = [];
   let geomCount = 0;
 
   for (let g = 0; g < ngeom; g++) {
@@ -99,7 +103,9 @@ export function buildGeomRenderer(opts: {
     });
     const mesh = new Mesh(geometry, material);
     mesh.matrixAutoUpdate = false; // we set the matrix directly each frame
+    mesh.userData.bodyId = geomBodyId[g] as number;
     meshes[g] = mesh;
+    pickMeshes.push(mesh);
     root.add(mesh);
     geomCount += 1;
   }
@@ -130,7 +136,7 @@ export function buildGeomRenderer(opts: {
     }
   }
 
-  return { root, sync, geomCount };
+  return { root, sync, geomCount, pickMeshes };
 }
 
 /**

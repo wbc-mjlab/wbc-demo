@@ -72,6 +72,7 @@ function render(): void {
     mjcfBaseUrl,
     startClipId: startClip,
     follow: true,
+    interactiveDrag: true,
     onMessage: (m) => ui.setStatus(m),
     onReady: (clips) => ui.populateClips(clips),
     onStatus: (s) => ui.updateMetrics(s),
@@ -79,6 +80,8 @@ function render(): void {
   })
     .then((handle) => {
       engine = handle;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).__engine = handle; // diagnostics hook
       ui.wire(handle);
     })
     .catch((err) => ui.setStatus(String(err), true));
