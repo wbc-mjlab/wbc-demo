@@ -9,17 +9,21 @@
 
 import {
   ACESFilmicToneMapping,
+  AmbientLight,
   Box3,
   BoxGeometry,
   Color,
   DirectionalLight,
+  Fog,
   GridHelper,
   Group,
   HemisphereLight,
   Mesh,
   MeshStandardMaterial,
   Object3D,
+  PCFSoftShadowMap,
   PerspectiveCamera,
+  PlaneGeometry,
   PMREMGenerator,
   Scene,
   Vector3,
@@ -69,14 +73,19 @@ export class Viewer {
 
   private container: HTMLElement;
   private readonly resizeObserver: ResizeObserver;
+  private readonly shadowsEnabled: boolean;
   private rafId = 0;
   private disposed = false;
 
   constructor(container: HTMLElement, options: ViewerOptions = {}) {
     this.container = container;
+    this.shadowsEnabled = !options.lowQuality;
 
     this.scene = new Scene();
-    this.scene.background = new Color(token('--color-viewport-bg', '#0a0d12'));
+    const bg = new Color(token('--color-viewport-bg', '#16283a'));
+    this.scene.background = bg;
+    // Soft depth falloff — same idea as mujoco_wasm's haze fog.
+    this.scene.fog = new Fog(bg, 12, 22);
 
     const { clientWidth: w, clientHeight: h } = this.sizedContainer();
     this.camera = new PerspectiveCamera(50, w / h, 0.01, 100);
@@ -87,10 +96,12 @@ export class Viewer {
       options.lowQuality ? 1 : Math.min(window.devicePixelRatio, 2),
     );
     this.renderer.setSize(w, h);
-    // Filmic tone mapping + a touch of exposure: gives the PBR robot materials a
-    // photographic roll-off instead of the flat, clipped look of raw output.
     this.renderer.toneMapping = ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    this.renderer.toneMappingExposure = 0.85;
+    if (this.shadowsEnabled) {
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = PCFSoftShadowMap;
+    }
     container.appendChild(this.renderer.domElement);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -99,7 +110,7 @@ export class Viewer {
 
     if (!options.lowQuality) this.addEnvironment();
     this.addLights();
-    this.addGround();
+    this.addGround(this.shadowsEnabled);
 
     this.robotRoot = new Group();
     this.scene.add(this.robotRoot);
@@ -119,44 +130,67 @@ export class Viewer {
     };
   }
 
-  /**
-   * Image-based lighting: render three.js' procedural RoomEnvironment to a PMREM
-   * and use it as `scene.environment`. This gives every PBR material soft, real
-   * reflections + ambient occlusion-like grounding for free — no remote HDR, no
-   * external asset (CSP-safe). The biggest single win for how the robot reads.
-   */
+  /** Subtle IBL — just enough ambient reflection without a studio look. */
   private addEnvironment(): void {
     const pmrem = new PMREMGenerator(this.renderer);
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environmentIntensity = 0.08;
     pmrem.dispose();
   }
 
+  /** Soft overcast-daylight: sky dome + warm sun + faint bounce fill. */
   private addLights(): void {
-    // Sky/ground hemisphere for a soft directional ambient gradient (cool slate
-    // up top, dark below) on top of the IBL.
-    this.scene.add(new HemisphereLight(0xcfe0f2, 0x0b1119, 0.5));
-    // Key light — warm-neutral, high and to the right; the main shaping light.
-    const key = new DirectionalLight(0xffffff, 2.2);
-    key.position.set(4, 7, 5);
-    this.scene.add(key);
-    // Fill — dim, opposite side, lifts the shadow side without flattening.
-    const fill = new DirectionalLight(0xffffff, 0.5);
-    fill.position.set(-4, 2, -3);
+    // Sky/ground bounce — cool sky, warm floor reflection.
+    this.scene.add(new HemisphereLight(0xb8cce8, 0x3a3530, 0.32));
+    // Lift deep shadows slightly without flattening the scene.
+    this.scene.add(new AmbientLight(0x8899aa, 0.06));
+
+    const sun = new DirectionalLight(0xfff2e6, 0.82);
+    sun.position.set(5, 9, 4);
+    if (this.shadowsEnabled) {
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(1024, 1024);
+      sun.shadow.camera.near = 0.5;
+      sun.shadow.camera.far = 14;
+      const extent = 4.5;
+      sun.shadow.camera.left = -extent;
+      sun.shadow.camera.right = extent;
+      sun.shadow.camera.top = extent;
+      sun.shadow.camera.bottom = -extent;
+      sun.shadow.bias = -0.0002;
+      sun.shadow.normalBias = 0.025;
+      sun.shadow.radius = 2.5;
+    }
+    this.scene.add(sun);
+
+    // Opposite-side sky fill — keeps the shadow side readable, not studio-flat.
+    const fill = new DirectionalLight(0xc8daf0, 0.14);
+    fill.position.set(-5, 4, -3);
     this.scene.add(fill);
-    // Cyan-tinted rim from behind for edge separation against the slate bg —
-    // echoes the brand accent and makes the silhouette pop.
-    const rim = new DirectionalLight(0x8fe3f0, 1.0);
-    rim.position.set(-3, 5, -7);
-    this.scene.add(rim);
   }
 
-  private addGround(): void {
+  private addGround(receiveShadow: boolean): void {
+    const floor = new Mesh(
+      new PlaneGeometry(40, 40),
+      new MeshStandardMaterial({
+        color: new Color(token('--color-floor', '#2a455c')),
+        roughness: 0.88,
+        metalness: 0,
+        envMapIntensity: 0.04,
+      }),
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = receiveShadow;
+    floor.name = 'floor';
+    this.scene.add(floor);
+
     const grid = new GridHelper(
       20,
       40,
-      new Color(token('--color-grid-major', '#2a3340')),
-      new Color(token('--color-grid-minor', '#1a2027')),
+      new Color(token('--color-grid-major', '#429eb0')),
+      new Color(token('--color-grid-minor', '#2f7a8a')),
     );
+    grid.position.y = 0.002;
     this.scene.add(grid);
   }
 

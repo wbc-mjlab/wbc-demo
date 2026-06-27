@@ -13,4 +13,4 @@ camera: default
 artifacts:
   onnx: policy.onnx
   config: config.yaml
-  clips: {kind: manifest, file: motion_library.yaml, default: dance1_subject1}
+  clips: {kind: manifest, file: reference/manifest.yaml, default: idle_02}

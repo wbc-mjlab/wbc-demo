@@ -32,6 +32,30 @@ import {
   type ReferenceIndex,
   type ReferenceStream,
 } from './policy-config';
+import {
+  browsableClipsWithoutManifest,
+  defaultBrowsableClip,
+  loadClipManifest,
+  resolveBrowsableClips,
+  resolvePoseClip,
+  type ClipManifest,
+} from './clip-manifest';
+import {
+  browseNext,
+  browsePrev,
+  canBrowseClips,
+  canGetup,
+  canLiedown,
+  canPlaySelectedClip,
+  createWbcFsm,
+  enterClipSelectMode,
+  fsmUiLabel,
+  onClipFinished,
+  startBrowsablePlayback,
+  startPosePlayback,
+  type ClipKind,
+  type WbcFsmState,
+} from './wbc-fsm';
 import { loadPolicy, type PolicyRunner } from './policy-runner';
 import { makeWbcController, type WbcController } from './wbc-controller';
 
@@ -83,6 +107,13 @@ export interface LiveStatus {
   fell: boolean;
   playing: boolean;
   inferMs: number | null;
+  loop: boolean;
+  robotIsUp: boolean;
+  fsmLabel: string;
+  canGetup: boolean;
+  canLiedown: boolean;
+  canBrowse: boolean;
+  clipKind: ClipKind;
 }
 
 export interface LiveEngineOptions {
@@ -109,6 +140,8 @@ export interface LiveEngineOptions {
   onError?: (msg: string) => void;
   /** Status message sink (loading progress + clip names). */
   onMessage?: (msg: string) => void;
+  /** Called when FSM gating changes (enable/disable pose buttons). */
+  onFsm?: (s: Readonly<LiveStatus>) => void;
 }
 
 export interface LiveEngineHandle {
@@ -121,6 +154,12 @@ export interface LiveEngineHandle {
   toggle(): boolean;
   reset(): void;
   selectClip(id: string): Promise<void>;
+  /** Play the browsable clip highlighted in select mode (deploy: A). */
+  playSelectedClip(): Promise<void>;
+  browseNextClip(): Promise<void>;
+  browsePrevClip(): Promise<void>;
+  triggerGetup(): Promise<void>;
+  triggerLiedown(): Promise<void>;
   /** Playback/sim-time multiplier (clamped 0.1–4). */
   setSpeed(x: number): void;
   setMode(m: EngineMode): void;
@@ -129,6 +168,8 @@ export interface LiveEngineHandle {
   /** Re-frame the camera on the robot. */
   reframe(): void;
   setFollow(on: boolean): void;
+  /** Loop the current browsable clip when it reaches the end. */
+  setLoop(on: boolean): void;
   /** Move the viewport canvas into a new container (engine-pool reuse). */
   reparent(container: HTMLElement): void;
   dispose(): void;
@@ -153,7 +194,9 @@ export async function createLiveEngine(
     controlHz: null, fps: null, realtime: null, speed: 1, mode: 'policy',
     clipId: null, clipName: null, clipFrame: null, clipFrames: null,
     pelvisHeight: null, upright: null, fell: false,
-    playing: opts.autoplay !== false, inferMs: null,
+    playing: opts.autoplay !== false, inferMs: null, loop: false,
+    robotIsUp: true, fsmLabel: 'select', canGetup: false, canLiedown: false,
+    canBrowse: true, clipKind: 'browsable',
   };
   const msg = (s: string) => opts.onMessage?.(s);
   const t0 = performance.now();
@@ -161,11 +204,17 @@ export async function createLiveEngine(
   msg('Loading config + reference index…');
   let cfg: PolicyConfig;
   let refIndex: ReferenceIndex;
+  let clipManifest: ClipManifest | null = null;
   try {
     [cfg, refIndex] = await Promise.all([
       loadPolicyConfig(`${opts.policyBaseUrl}config.yaml`),
       loadReferenceIndex(`${opts.policyBaseUrl}reference/index.json`),
     ]);
+    try {
+      clipManifest = await loadClipManifest(`${opts.policyBaseUrl}reference/manifest.yaml`);
+    } catch {
+      msg('No reference/manifest.yaml — showing all non-pose clips');
+    }
   } catch (err) {
     const m = `config/index load failed: ${String(err)}`;
     status.error = m; opts.onError?.(m); throw new Error(m);
@@ -331,28 +380,132 @@ export async function createLiveEngine(
 
   if (opts.interactiveDrag) setupDrag();
 
-  // ---- clip + run state ----------------------------------------------------
+  // ---- clip + FSM state (wbc-g1-deploy Wbc_Tracking) -----------------------
   let stream: ReferenceStream;
   let clipFrame = 0;
   let fellFrames = 0;
   let follow = opts.follow !== false;
+  let loopClip = false;
   let speed = 1;
   let mode: EngineMode = 'policy';
   const followTarget = new Vector3();
-  const prevFollow = new Vector3();
+  const viewCenter = new Vector3();
+  const viewSize = new Vector3();
   let followInit = false;
 
-  async function selectClip(id: string): Promise<void> {
-    const c = refIndex.clips.find((x) => x.id === id) ?? refIndex.clips[0];
-    if (!c) throw new Error('reference index has no clips');
+  const browsableClips = clipManifest
+    ? resolveBrowsableClips(refIndex, clipManifest)
+    : browsableClipsWithoutManifest(refIndex);
+  if (!browsableClips.length) {
+    const m = 'clip manifest resolved to zero browsable clips';
+    status.error = m; opts.onError?.(m); throw new Error(m);
+  }
+
+  let fsm: WbcFsmState = createWbcFsm(0);
+  let activeKind: ClipKind = 'browsable';
+
+  function syncFsmStatus(): void {
+    status.robotIsUp = fsm.robotIsUp;
+    status.fsmLabel = fsmUiLabel(fsm);
+    status.canGetup = canGetup(fsm);
+    status.canLiedown = canLiedown(fsm);
+    status.canBrowse = canBrowseClips(fsm);
+    status.clipKind = activeKind;
+    opts.onFsm?.(status);
+  }
+
+  async function loadClipStream(c: ReferenceClip): Promise<void> {
     msg(`Loading clip ${c.name}…`);
-    stream = await loadReferenceStream(`${opts.policyBaseUrl}reference/${c.file}`, refIndex.commandDim);
+    stream = await loadReferenceStream(
+      `${opts.policyBaseUrl}reference/${c.file}`,
+      refIndex.commandDim,
+    );
     status.clipId = c.id;
     status.clipName = c.name;
     status.clipFrames = stream.frames;
-    resetToStart();
     opts.onClip?.(c);
+  }
+
+  async function loadClip(
+    c: ReferenceClip,
+    kind: ClipKind,
+    autoplay: boolean,
+    resetPose = false,
+  ): Promise<void> {
+    activeKind = kind;
+    await loadClipStream(c);
+    clipFrame = 0;
+    // Deploy applyMotionLoader: swap reference + reset policy episode, not robot qpos.
+    if (resetPose) {
+      controller.resetToReference(stream.frame(0));
+      status.fell = false;
+      fellFrames = 0;
+    } else {
+      controller.resetActions();
+    }
+    robot.sync(sim);
+    followInit = false;
+    if (autoplay) {
+      if (kind === 'browsable') startBrowsablePlayback(fsm);
+      else startPosePlayback(fsm, kind);
+      status.playing = true;
+    } else {
+      enterClipSelectMode(fsm);
+      status.playing = false;
+    }
+    syncFsmStatus();
     msg(`Tracking “${c.name}” (${stream.frames} frames)`);
+  }
+
+  async function selectClip(id: string): Promise<void> {
+    const idx = browsableClips.findIndex((x) => x.id === id);
+    const c = idx >= 0 ? browsableClips[idx] : browsableClips[0];
+    if (!c) throw new Error('no browsable clips');
+    fsm.selectedBrowsableIndex = idx >= 0 ? idx : 0;
+    await loadClip(c, 'browsable', true, false);
+  }
+
+  async function playSelectedClip(): Promise<void> {
+    if (!canPlaySelectedClip(fsm)) return;
+    const c = browsableClips[fsm.selectedBrowsableIndex];
+    if (!c) return;
+    await loadClip(c, 'browsable', true, false);
+  }
+
+  async function browseNextClip(): Promise<void> {
+    browseNext(fsm, browsableClips.length);
+    syncFsmStatus();
+    if (!canBrowseClips(fsm)) return;
+    const c = browsableClips[fsm.selectedBrowsableIndex]!;
+    await loadClip(c, 'browsable', true, false);
+  }
+
+  async function browsePrevClip(): Promise<void> {
+    browsePrev(fsm, browsableClips.length);
+    syncFsmStatus();
+    if (!canBrowseClips(fsm)) return;
+    const c = browsableClips[fsm.selectedBrowsableIndex]!;
+    await loadClip(c, 'browsable', true, false);
+  }
+
+  async function triggerGetup(): Promise<void> {
+    if (!canGetup(fsm)) return;
+    const c = resolvePoseClip(refIndex, clipManifest, 'getup');
+    if (!c) {
+      msg('getup clip missing from reference index');
+      return;
+    }
+    await loadClip(c, 'pose_getup', true, false);
+  }
+
+  async function triggerLiedown(): Promise<void> {
+    if (!canLiedown(fsm)) return;
+    const c = resolvePoseClip(refIndex, clipManifest, 'liedown');
+    if (!c) {
+      msg('liedown clip missing from reference index');
+      return;
+    }
+    await loadClip(c, 'pose_liedown', true, false);
   }
 
   function resetToStart(): void {
@@ -362,19 +515,36 @@ export async function createLiveEngine(
     status.fell = false;
     fellFrames = 0;
     followInit = false;
+    if (fsm.robotIsUp) enterClipSelectMode(fsm);
+    syncFsmStatus();
   }
 
-  const startId =
-    opts.startClipId ??
-    refIndex.clips.find((c) => c.id === 'walk_01')?.id ??
-    refIndex.clips[0]?.id;
-  if (!startId) {
-    const m = 'reference index has no clips';
+  function finishClipPlayback(): void {
+    if (loopClip && activeKind === 'browsable') {
+      clipFrame = 0;
+      controller.resetActions();
+      status.playing = true;
+      startBrowsablePlayback(fsm);
+      syncFsmStatus();
+      return;
+    }
+    clipFrame = Math.max(0, stream.frames - 1);
+    onClipFinished(fsm);
+    status.playing = false;
+    syncFsmStatus();
+  }
+
+  const startClip =
+    browsableClips.find((c) => c.id === opts.startClipId) ??
+    defaultBrowsableClip(browsableClips, clipManifest);
+  if (!startClip) {
+    const m = 'no default browsable clip';
     status.error = m; opts.onError?.(m); throw new Error(m);
   }
-  await selectClip(startId);
+  fsm.selectedBrowsableIndex = Math.max(0, browsableClips.indexOf(startClip));
+  await loadClip(startClip, 'browsable', opts.autoplay !== false, true);
   frameViewer();
-  opts.onReady?.(refIndex.clips);
+  opts.onReady?.(browsableClips);
 
   // ---- control + render loop ----------------------------------------------
   const policyDt = cfg.policyStepDt;
@@ -404,9 +574,12 @@ export async function createLiveEngine(
       sim.mujoco.mj_step(sim.model, sim.data);
     }
     ctrlCount += 1;
-    if (status.playing) {
-      clipFrame += 1;
-      if (clipFrame >= stream.frames) clipFrame = 0;
+    if (status.playing && fsm.clipPlaybackActive) {
+      if (clipFrame >= stream.frames - 1) {
+        finishClipPlayback();
+      } else {
+        clipFrame += 1;
+      }
     }
   }
 
@@ -467,45 +640,58 @@ export async function createLiveEngine(
     const qz = xquat[b * 4 + 3] as number;
     const gz = -(qw * qw - qx * qx - qy * qy + qz * qz);
     status.upright = +gz.toFixed(3);
-    if (h < 0.45) fellFrames += 1; else fellFrames = 0;
-    status.fell = fellFrames >= 1;
+    if (h < 0.45 && fsm.robotIsUp) fellFrames += 1;
+    else fellFrames = 0;
+    status.fell = fsm.robotIsUp && fellFrames >= 1;
+  }
+
+  function robotViewRadius(): number | null {
+    robot.root.updateWorldMatrix(true, true);
+    const box = new Box3().setFromObject(robot.root);
+    if (box.isEmpty()) return null;
+    box.getCenter(viewCenter);
+    box.getSize(viewSize);
+    return Math.max(viewSize.x, viewSize.y, viewSize.z, 1.1);
   }
 
   function followRobot(): void {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const xpos: any = sim.data.xpos;
-    const b = controller.baseBodyId;
-    followTarget.set(xpos[b * 3] as number, 0, -(xpos[b * 3 + 1] as number));
-    if (!followInit) { prevFollow.copy(followTarget); followInit = true; return; }
-    const dx = (followTarget.x - prevFollow.x) * 0.1;
-    const dz = (followTarget.z - prevFollow.z) * 0.1;
+    const radius = robotViewRadius();
+    if (radius == null) return;
+    const targetY = Math.max(viewCenter.y, 0.5);
+    followTarget.set(viewCenter.x, targetY, viewCenter.z);
+
+    if (!followInit) {
+      viewer.controls.target.copy(followTarget);
+      followInit = true;
+      return;
+    }
+
+    const alpha = 0.14;
+    const dx = (followTarget.x - viewer.controls.target.x) * alpha;
+    const dy = (followTarget.y - viewer.controls.target.y) * alpha;
+    const dz = (followTarget.z - viewer.controls.target.z) * alpha;
     viewer.controls.target.x += dx;
+    viewer.controls.target.y += dy;
     viewer.controls.target.z += dz;
     viewer.camera.position.x += dx;
+    viewer.camera.position.y += dy;
     viewer.camera.position.z += dz;
-    prevFollow.x += dx;
-    prevFollow.z += dz;
   }
 
   function frameViewer(): void {
-    // geom meshes use matrixAutoUpdate=false; refresh world bounds before measuring.
-    robot.root.updateWorldMatrix(true, true);
-    const box = new Box3().setFromObject(robot.root);
-    if (box.isEmpty()) return;
-    const size = box.getSize(new Vector3());
-    const center = box.getCenter(new Vector3());
-    const radius = Math.max(size.x, size.y, size.z, 1.1);
-    const targetY = Math.max(center.y, 0.7);
-    viewer.controls.target.set(center.x, targetY, center.z);
+    const radius = robotViewRadius();
+    if (radius == null) return;
+    const targetY = Math.max(viewCenter.y, 0.7);
+    viewer.controls.target.set(viewCenter.x, targetY, viewCenter.z);
     viewer.camera.position.set(
-      center.x + radius * 1.3,
+      viewCenter.x + radius * 1.3,
       targetY + radius * 0.55,
-      center.z + radius * 1.9,
+      viewCenter.z + radius * 1.9,
     );
     viewer.camera.near = radius / 100;
     viewer.camera.far = radius * 100;
     viewer.camera.updateProjectionMatrix();
-    followInit = false;
+    followInit = true;
   }
 
   status.ready = true;
@@ -513,13 +699,31 @@ export async function createLiveEngine(
 
   return {
     viewer,
-    clips: refIndex.clips,
+    clips: browsableClips,
     status,
-    play() { status.playing = true; },
+    play() {
+      if (canPlaySelectedClip(fsm)) {
+        void playSelectedClip();
+        return;
+      }
+      if (fsm.clipPlaybackActive) status.playing = true;
+    },
     pause() { status.playing = false; },
-    toggle() { status.playing = !status.playing; return status.playing; },
+    toggle() {
+      if (canPlaySelectedClip(fsm) && !status.playing) {
+        void playSelectedClip();
+        return true;
+      }
+      status.playing = !status.playing;
+      return status.playing;
+    },
     reset() { resetToStart(); },
     selectClip,
+    playSelectedClip,
+    browseNextClip,
+    browsePrevClip,
+    triggerGetup,
+    triggerLiedown,
     setSpeed(x: number) { speed = Math.min(4, Math.max(0.1, x)); status.speed = speed; },
     setMode(m: EngineMode) {
       mode = m; status.mode = m;
@@ -533,7 +737,14 @@ export async function createLiveEngine(
       qvel[1] = (qvel[1] as number) + Math.sin(theta) * magnitude;
     },
     reframe() { frameViewer(); },
-    setFollow(on: boolean) { follow = on; followInit = false; },
+    setFollow(on: boolean) {
+      follow = on;
+      followInit = false;
+    },
+    setLoop(on: boolean) {
+      loopClip = on;
+      status.loop = on;
+    },
     reparent(el: HTMLElement) { viewer.reparent(el); },
     dispose() {
       running = false;

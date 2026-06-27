@@ -67,41 +67,11 @@
       ]
     },
     {
-      "id": "flip_01",
-      "name": "Flip 01",
-      "file": "flip_01.bin",
-      "frames": 382,
-      "durationSec": 7.64,
-      "tags": [
-        "flip"
-      ]
-    },
-    {
       "id": "flip_02",
       "name": "Flip 02",
       "file": "flip_02.bin",
       "frames": 384,
       "durationSec": 7.68,
-      "tags": [
-        "flip"
-      ]
-    },
-    {
-      "id": "flip_03",
-      "name": "Flip 03",
-      "file": "flip_03.bin",
-      "frames": 347,
-      "durationSec": 6.94,
-      "tags": [
-        "flip"
-      ]
-    },
-    {
-      "id": "flip_04",
-      "name": "Flip 04",
-      "file": "flip_04.bin",
-      "frames": 372,
-      "durationSec": 7.44,
       "tags": [
         "flip"
       ]
@@ -151,25 +121,23 @@
       ]
     },
     {
-      "id": "walk_02",
-      "name": "Walk 02",
-      "file": "walk_02.bin",
-      "frames": 564,
-      "durationSec": 11.28,
+      "id": "getup_01",
+      "name": "Get Up",
+      "file": "getup_01.bin",
+      "frames": 231,
+      "durationSec": 4.62,
       "tags": [
-        "walk",
-        "locomotion"
+        "getup"
       ]
     },
     {
-      "id": "walk_03",
-      "name": "Walk 03",
-      "file": "walk_03.bin",
-      "frames": 554,
-      "durationSec": 11.08,
+      "id": "liedown_01",
+      "name": "Lie Down",
+      "file": "liedown_01.bin",
+      "frames": 138,
+      "durationSec": 2.76,
       "tags": [
-        "walk",
-        "locomotion"
+        "liedown"
       ]
     }
   ]

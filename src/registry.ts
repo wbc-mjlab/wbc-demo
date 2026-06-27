@@ -118,3 +118,13 @@ export function discoverPolicies(includeExample = true): PolicyEntry[] {
 export function getPolicy(id: string): PolicyEntry | undefined {
   return discoverPolicies().find((p) => p.id === id);
 }
+
+/** First live-capable policy — default for the landing demo. */
+export function getDefaultLivePolicy(): PolicyEntry | undefined {
+  return discoverPolicies().find(
+    (p) =>
+      p.id !== EXAMPLE_ID
+      && Boolean(p.manifest.artifacts?.onnx)
+      && (p.manifest.robot ?? 'g1') === 'g1',
+  );
+}

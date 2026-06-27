@@ -13,8 +13,11 @@ static site to **GitHub Pages**.
   Scroll to bring more to life; click one to dive in.
 - **Per-policy page** — full-screen viewport with live controls: clip switch,
   speed, a policy/open-loop toggle, a "push" perturbation, and camera framing.
-- **Data-driven** — the gallery is built from whatever policy folders are committed
-  under [`policies/`](policies/). Adding a policy is a content PR, not a code change.
+- **Deploy-aligned clip UX** — browsable clips come from
+  `policies/<id>/reference/manifest.yaml` (same idea as
+  [wbc-g1-deploy](https://github.com/wbc-mjlab/wbc-g1-deploy) `config/clips/manifest.yaml`).
+  Get-up / lie-down are **pose clips** gated by an in-tracking FSM (only when down/up
+  and idle), matching deploy `Wbc_Tracking` behavior.
 - **No special headers** — inference runs on the single-threaded SIMD WASM backend
   (`numThreads = 1`), so there's **no SharedArrayBuffer / COOP-COEP requirement** —
   it deploys on plain GitHub Pages.

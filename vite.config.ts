@@ -67,12 +67,13 @@ export default defineConfig({
   // onnxruntime-web ships prebuilt wasm; let Vite leave it alone.
   optimizeDeps: { exclude: ['onnxruntime-web'] },
   build: {
-    // Multi-page app: the gallery (index.html) and the per-policy view
-    // (policy.html) are separate HTML entry points. Three.js code-splits per
-    // page so the gallery stays light.
+    // Multi-page app: live demo (index.html), clip gallery (gallery.html),
+    // and legacy deep links (policy.html). Three.js code-splits per page so
+    // the gallery stays light.
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
+        gallery: resolve(__dirname, 'gallery.html'),
         policy: resolve(__dirname, 'policy.html'),
       },
     },
