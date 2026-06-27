@@ -98,10 +98,13 @@ export function buildGeomRenderer(opts: {
     const r = g * 4;
     const material = new MeshStandardMaterial({
       color: new Color(geomRgba[r], geomRgba[r + 1], geomRgba[r + 2]),
-      roughness: 0.7,
-      metalness: 0.1,
+      roughness: 0.72,
+      metalness: 0.12,
+      envMapIntensity: 0.12,
     });
     const mesh = new Mesh(geometry, material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     mesh.matrixAutoUpdate = false; // we set the matrix directly each frame
     mesh.userData.bodyId = geomBodyId[g] as number;
     meshes[g] = mesh;

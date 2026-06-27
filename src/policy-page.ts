@@ -4,8 +4,7 @@
  * Reads `?id=<policy>` from the URL, looks the policy up in the registry, and
  * mounts the live WBC engine (src/engine/live-engine.ts) full-screen with the
  * telemetry-console HUD + the full control cluster: clip switch, play/pause,
- * reset, speed, policy/open-loop toggle, perturbation (push), and camera
- * reframe. Policies without an ONNX artifact fall back to a metadata card.
+ * reset, speed, policy/open-loop toggle, perturbation (push), and camera follow.
  */
 
 import './styles/app.css';
@@ -15,6 +14,7 @@ import { createLiveEngine, type EngineMode, type LiveStatus, type LiveEngineHand
 import type { ReferenceClip } from './engine/policy-config';
 
 let engine: LiveEngineHandle | undefined;
+let keyHandlerCleanup: (() => void) | undefined;
 
 function homeHref(): string {
   return import.meta.env.BASE_URL;
@@ -71,11 +71,13 @@ function render(): void {
     policyBaseUrl: baseUrl,
     mjcfBaseUrl,
     startClipId: startClip,
+    autoplay: false,
     follow: true,
     interactiveDrag: true,
     onMessage: (m) => ui.setStatus(m),
     onReady: (clips) => ui.populateClips(clips),
     onStatus: (s) => ui.updateMetrics(s),
+    onFsm: (s) => ui.updateFsm(s),
     onError: (m) => ui.setStatus(m, true),
   })
     .then((handle) => {
@@ -104,6 +106,10 @@ function buildUi(root: HTMLElement, policyName: string) {
         <div class="live__status" id="lv-status">booting…</div>
         <div class="live__controls">
           <label class="live__select"><span>clip</span><select id="lv-clip"></select></label>
+          <button id="lv-prev" class="live__btn" title="Previous clip (←)">◀</button>
+          <button id="lv-next" class="live__btn" title="Next clip (→)">▶</button>
+          <button id="lv-getup" class="live__btn" title="Get up from floor (↑)">get up</button>
+          <button id="lv-liedown" class="live__btn" title="Lie down when idle (↓)">lie down</button>
           <label class="live__select"><span>speed</span>
             <select id="lv-speed">
               <option value="0.25">0.25×</option>
@@ -112,13 +118,32 @@ function buildUi(root: HTMLElement, policyName: string) {
               <option value="2">2×</option>
             </select>
           </label>
-          <button id="lv-mode" class="live__btn" title="Toggle the policy on/off">policy</button>
+          <button id="lv-mode" class="live__btn" title="Toggle policy on/off (P)">policy</button>
           <button id="lv-push" class="live__btn" title="Shove the robot">push</button>
-          <button id="lv-cam" class="live__btn" title="Re-frame camera">reframe</button>
-          <button id="lv-play" class="live__btn live__btn--primary">⏸&nbsp;pause</button>
-          <button id="lv-reset" class="live__btn">↺&nbsp;reset</button>
+          <button id="lv-follow" class="live__btn" title="Follow robot (F)" aria-pressed="true">follow</button>
+          <button id="lv-loop" class="live__btn" title="Loop clip" aria-pressed="false">loop</button>
+          <button id="lv-play" class="live__btn live__btn--primary" title="Play / pause (Space)">⏸&nbsp;pause</button>
+          <button id="lv-reset" class="live__btn" title="Reset (R)">↺&nbsp;reset</button>
         </div>
       </header>
+
+      <details class="live__keys" id="lv-keys" open>
+        <summary class="live__keys-toggle">controls</summary>
+        <table class="live__keys-table">
+          <tbody>
+            <tr><th scope="row"><kbd>Space</kbd></th><td>Play / pause</td></tr>
+            <tr><th scope="row"><kbd>R</kbd></th><td>Reset clip</td></tr>
+            <tr><th scope="row"><kbd>←</kbd> <kbd>→</kbd></th><td>Previous / next clip (auto-play)</td></tr>
+            <tr><th scope="row"><kbd>↑</kbd> <kbd>↓</kbd></th><td>Get up / lie down</td></tr>
+            <tr><th scope="row"><kbd>F</kbd></th><td>Toggle follow</td></tr>
+            <tr><th scope="row"><kbd>P</kbd></th><td>Policy on / off</td></tr>
+            <tr><th scope="row"><kbd>?</kbd></th><td>Show / hide this panel</td></tr>
+            <tr><th scope="row">Clip picker</th><td>Auto-play on change</td></tr>
+            <tr><th scope="row">Loop</th><td>Repeat clip when finished</td></tr>
+            <tr><th scope="row">Drag</th><td>Perturb robot</td></tr>
+          </tbody>
+        </table>
+      </details>
 
       <footer class="live__telemetry" id="lv-metrics"></footer>
       <div class="live__progress" aria-hidden="true"><span id="lv-progress"></span></div>
@@ -132,12 +157,18 @@ function buildUi(root: HTMLElement, policyName: string) {
   const metricsEl = $('#lv-metrics');
   const progressEl = $('#lv-progress');
   const clipEl = $<HTMLSelectElement>('#lv-clip');
+  const prevEl = $<HTMLButtonElement>('#lv-prev');
+  const nextEl = $<HTMLButtonElement>('#lv-next');
+  const getupEl = $<HTMLButtonElement>('#lv-getup');
+  const liedownEl = $<HTMLButtonElement>('#lv-liedown');
   const speedEl = $<HTMLSelectElement>('#lv-speed');
   const modeEl = $<HTMLButtonElement>('#lv-mode');
   const pushEl = $<HTMLButtonElement>('#lv-push');
-  const camEl = $<HTMLButtonElement>('#lv-cam');
+  const followEl = $<HTMLButtonElement>('#lv-follow');
+  const loopEl = $<HTMLButtonElement>('#lv-loop');
   const playEl = $<HTMLButtonElement>('#lv-play');
   const resetEl = $<HTMLButtonElement>('#lv-reset');
+  const keysEl = $<HTMLDetailsElement>('#lv-keys');
 
   let latest: LiveStatus | undefined;
   let playing = true;
@@ -167,11 +198,23 @@ function buildUi(root: HTMLElement, policyName: string) {
         .map((c) => `<option value="${c.id}"${c.id === current ? ' selected' : ''}>${escapeHtml(c.name)}</option>`)
         .join('');
     },
+    updateFsm(s: LiveStatus) {
+      clipEl.disabled = !s.canBrowse;
+      prevEl.disabled = !s.canBrowse;
+      nextEl.disabled = !s.canBrowse;
+      getupEl.disabled = !s.canGetup;
+      liedownEl.disabled = !s.canLiedown;
+    },
     updateMetrics(s: LiveStatus) {
       latest = s;
       playing = s.playing;
+      playEl.innerHTML = playing ? '⏸&nbsp;pause' : '▶&nbsp;play';
+      loopEl.setAttribute('aria-pressed', String(s.loop));
       renderState();
+      this.updateFsm(s);
       metricsEl.innerHTML = [
+        tm('fsm', s.fsmLabel),
+        tm('pose', s.robotIsUp ? 'up' : 'down', s.robotIsUp ? 'ok' : 'warn'),
         tm('realtime', s.realtime != null ? `${s.realtime}×` : '…', toneRealtime(s.realtime)),
         tm('speed', `${s.speed}×`),
         tm('ctrl', s.controlHz != null ? `${s.controlHz} Hz` : '…'),
@@ -189,23 +232,109 @@ function buildUi(root: HTMLElement, policyName: string) {
       if (clipEl.value !== s.clipId && s.clipId) clipEl.value = s.clipId;
     },
     wire(h: LiveEngineHandle) {
+      let following = true;
+
+      const syncModeButton = (): void => {
+        modeEl.textContent = mode;
+        modeEl.classList.toggle('live__btn--warn', mode === 'open-loop');
+        renderState();
+      };
+
+      const syncFollowButton = (): void => {
+        followEl.setAttribute('aria-pressed', String(following));
+        followEl.title = following ? 'Follow on (F)' : 'Follow off (F)';
+      };
+
       clipEl.addEventListener('change', () => void h.selectClip(clipEl.value));
+      prevEl.addEventListener('click', () => void h.browsePrevClip());
+      nextEl.addEventListener('click', () => void h.browseNextClip());
+      getupEl.addEventListener('click', () => void h.triggerGetup());
+      liedownEl.addEventListener('click', () => void h.triggerLiedown());
       speedEl.addEventListener('change', () => h.setSpeed(parseFloat(speedEl.value)));
       modeEl.addEventListener('click', () => {
         mode = mode === 'policy' ? 'open-loop' : 'policy';
         h.setMode(mode);
-        modeEl.textContent = mode;
-        modeEl.classList.toggle('live__btn--warn', mode === 'open-loop');
-        renderState();
+        syncModeButton();
       });
       pushEl.addEventListener('click', () => h.perturb());
-      camEl.addEventListener('click', () => h.reframe());
+      followEl.addEventListener('click', () => {
+        following = !following;
+        h.setFollow(following);
+        syncFollowButton();
+      });
+      loopEl.addEventListener('click', () => {
+        const on = loopEl.getAttribute('aria-pressed') !== 'true';
+        h.setLoop(on);
+        loopEl.setAttribute('aria-pressed', String(on));
+      });
       resetEl.addEventListener('click', () => h.reset());
       playEl.addEventListener('click', () => {
         playing = h.toggle();
         playEl.innerHTML = playing ? '⏸&nbsp;pause' : '▶&nbsp;play';
         renderState();
       });
+
+      syncFollowButton();
+
+      const onKey = (e: KeyboardEvent): void => {
+        if (e.repeat) return;
+        const el = e.target;
+        if (!(el instanceof HTMLElement)) return;
+        if (el.isContentEditable) return;
+        const tag = el.tagName;
+        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+        switch (e.code) {
+          case 'KeyR':
+            e.preventDefault();
+            h.reset();
+            break;
+          case 'Space':
+            e.preventDefault();
+            playing = h.toggle();
+            playEl.innerHTML = playing ? '⏸&nbsp;pause' : '▶&nbsp;play';
+            renderState();
+            break;
+          case 'ArrowLeft':
+            e.preventDefault();
+            if (!prevEl.disabled) void h.browsePrevClip();
+            break;
+          case 'ArrowRight':
+            e.preventDefault();
+            if (!nextEl.disabled) void h.browseNextClip();
+            break;
+          case 'ArrowUp':
+            e.preventDefault();
+            if (!getupEl.disabled) void h.triggerGetup();
+            break;
+          case 'ArrowDown':
+            e.preventDefault();
+            if (!liedownEl.disabled) void h.triggerLiedown();
+            break;
+          case 'KeyF':
+            e.preventDefault();
+            following = !following;
+            h.setFollow(following);
+            syncFollowButton();
+            break;
+          case 'KeyP':
+            e.preventDefault();
+            mode = mode === 'policy' ? 'open-loop' : 'policy';
+            h.setMode(mode);
+            syncModeButton();
+            break;
+          default:
+            if (e.key === '?') {
+              e.preventDefault();
+              keysEl.open = !keysEl.open;
+            }
+            return;
+        }
+      };
+
+      keyHandlerCleanup?.();
+      window.addEventListener('keydown', onKey);
+      keyHandlerCleanup = () => window.removeEventListener('keydown', onKey);
     },
   };
 }
@@ -227,6 +356,9 @@ function tonePelvis(x: number | null): string {
   return x > 0.6 ? 'ok' : x >= 0.45 ? 'warn' : 'bad';
 }
 
-window.addEventListener('beforeunload', () => engine?.dispose());
+window.addEventListener('beforeunload', () => {
+  keyHandlerCleanup?.();
+  engine?.dispose();
+});
 
 render();

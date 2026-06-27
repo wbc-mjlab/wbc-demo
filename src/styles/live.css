@@ -206,6 +206,12 @@
   background: var(--color-surface-hover);
 }
 .live__btn:active { transform: translateY(1px); }
+.live__btn:disabled,
+.live__select select:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 .live__btn:focus-visible,
 .live__select select:focus-visible {
   outline: 2px solid var(--color-accent);
@@ -222,6 +228,72 @@
 .live__btn--warn {
   border-color: color-mix(in srgb, var(--color-amber) 60%, transparent);
   color: var(--color-amber);
+}
+.live__btn[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
+  color: var(--color-accent);
+}
+
+/* ---- Keyboard controls panel ------------------------------------------- */
+.live__keys {
+  position: absolute;
+  right: 1rem;
+  bottom: 3.25rem;
+  z-index: 2;
+  max-width: min(18rem, calc(100vw - 2rem));
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--hud-bg);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  backdrop-filter: blur(16px) saturate(1.25);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--color-text);
+}
+.live__keys-toggle {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.45rem 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  user-select: none;
+}
+.live__keys-toggle::-webkit-details-marker { display: none; }
+.live__keys[open] .live__keys-toggle {
+  border-bottom: 1px solid var(--hairline);
+  color: var(--color-accent);
+}
+.live__keys-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.live__keys-table th,
+.live__keys-table td {
+  padding: 0.35rem 0.65rem;
+  text-align: left;
+  vertical-align: top;
+}
+.live__keys-table th {
+  white-space: nowrap;
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+.live__keys-table tr + tr th,
+.live__keys-table tr + tr td {
+  border-top: 1px solid color-mix(in srgb, var(--hairline) 65%, transparent);
+}
+.live__keys-table kbd {
+  display: inline-block;
+  min-width: 1.35rem;
+  padding: 0.08rem 0.35rem;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-surface) 80%, transparent);
+  font: inherit;
+  font-size: 0.72rem;
+  text-align: center;
+  color: var(--color-text);
 }
 
 /* ---- Telemetry readouts -------------------------------------------------- */
@@ -276,6 +348,12 @@
     flex-basis: 100%;
   }
   .live__controls { order: 2; }
+  .live__keys {
+    right: 0.75rem;
+    bottom: auto;
+    top: 4.5rem;
+    max-width: calc(100vw - 1.5rem);
+  }
   .live__telemetry {
     gap: 0.25rem 1.1rem;
     padding: 0.55rem 0.75rem;

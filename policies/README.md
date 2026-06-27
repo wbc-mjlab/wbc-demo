@@ -20,7 +20,8 @@ policies/
     policy.onnx                # trained policy network (onnxruntime-web runs it live)
     config.yaml                # deploy obs/action config (schema_version: wbc_tracking_params_v1)
     reference/
-      index.json               # clip list + term layout (schema: wbc_reference_stream_v1)
+      index.json               # all exported clip streams (schema: wbc_reference_stream_v1)
+      manifest.yaml            # browsable clip list + pose_clips (mirrors deploy manifest.yaml)
       <clip>.bin               # per-clip reference-command stream (frames × 39, float32)
     motion_library.yaml        # clip-library provenance (optional)
     thumb.png                  # gallery thumbnail (optional)
@@ -82,7 +83,7 @@ PR can't take the gallery down, and CI runs `npm run validate` as a hard gate.
 | --- | --- | --- | --- |
 | `onnx` | ✅* | string | ONNX policy network, e.g. `"policy.onnx"`. (*required if an `artifacts` block is present.) |
 | `config` | — | string | Deploy obs/action config (`schema_version: wbc_tracking_params_v1`); consumed by the live engine. |
-| `clips` | — | object | Optional clip metadata (inline list or `motion_library.yaml` pointer). Informational — the live clip list comes from `reference/index.json`. |
+| `clips` | — | object | Optional clip metadata (inline list or `motion_library.yaml` pointer). Informational — **browsable clips** come from `reference/manifest.yaml` (fallback: all non-pose entries in `index.json`). |
 
 ### Paths
 

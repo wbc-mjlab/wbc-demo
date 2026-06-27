@@ -31,8 +31,9 @@
 
   /* --- 3D viewport (the literal org sim-scene slate, deepened) ---------- */
   --color-viewport-bg: #16283a;   /* Three.js scene clear color */
-  --color-grid-major: #2f4258;    /* grid helper major lines */
-  --color-grid-minor: #1c2c3a;    /* grid helper minor lines */
+  --color-floor: #2a455c;         /* ground plane — lighter than viewport bg */
+  --color-grid-major: #429eb0;    /* grid helper major lines — saturated teal */
+  --color-grid-minor: #2f7a8a;    /* grid helper minor lines */
 
   /* --- Type (system / self-hostable stacks; no remote font CDN) --------- */
   --font-display: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;

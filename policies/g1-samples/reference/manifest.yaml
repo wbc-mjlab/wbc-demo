@@ -1,0 +1,19 @@
+# Browsable clips for the web demo (same role as wbc-g1-deploy config/clips/manifest.yaml).
+# Comment out entries to hide them from the gallery and policy-page clip picker.
+clips:
+  - name: idle_02
+  - name: dance_01
+  - name: dance_02
+  - name: dance_03
+  - name: fight_combo_02
+  - name: walk_01
+  - name: run_01
+  - name: flip_01
+  - name: flip_02
+  - name: sprint_01
+default: idle_02
+
+# Pose clips — not browsable (wbc-g1-deploy Wbc_Tracking.pose_clips).
+pose_clips:
+  getup: getup_01
+  liedown: liedown_01

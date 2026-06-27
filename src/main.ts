@@ -15,6 +15,11 @@ import './styles/live.css';
 import { discoverPolicies } from './registry';
 import { createLiveEngine, type LiveEngineHandle } from './engine/live-engine';
 import { loadReferenceIndex } from './engine/policy-config';
+import {
+  browsableClipsWithoutManifest,
+  loadClipManifest,
+  resolveBrowsableClips,
+} from './engine/clip-manifest';
 import type { PolicyEntry } from './types';
 
 const EXAMPLE_ID = '_example';
@@ -55,12 +60,6 @@ function escapeHtml(value: string): string {
 }
 
 interface GalleryClip { id: string; name: string; tags?: string[] }
-
-/** Floor-start clips the standing locomotion policy can't track — they always
- * collapse, so keep them off the wall (still reachable from the policy page). */
-function isFloorFaller(clip: GalleryClip): boolean {
-  return /getup|liedown|fallandgetup/i.test(clip.id);
-}
 
 // Lead with reliable locomotion; push fight/flip/sport later for a strong open.
 const CLIP_ORDER = ['walk', 'run', 'sprint', 'locomotion', 'idle', 'dance', 'jump', 'fight', 'sport', 'flip'];
@@ -236,10 +235,16 @@ async function render(): Promise<void> {
   const gathered = await Promise.all(
     livePolicies.map(async (entry) => {
       try {
-        const idx = await loadReferenceIndex(`${entry.baseUrl}reference/index.json`);
-        return idx.clips
-          .filter((c) => !isFloorFaller(c))
-          .map((clip) => ({ entry, clip: clip as GalleryClip }));
+        const base = `${entry.baseUrl}reference/`;
+        const idx = await loadReferenceIndex(`${base}index.json`);
+        let browsable = browsableClipsWithoutManifest(idx);
+        try {
+          const manifest = await loadClipManifest(`${base}manifest.yaml`);
+          browsable = resolveBrowsableClips(idx, manifest);
+        } catch {
+          /* no manifest — non-pose clips only */
+        }
+        return browsable.map((clip) => ({ entry, clip: clip as GalleryClip }));
       } catch (err) {
         console.warn(`[gallery] no reference index for ${entry.id}:`, err);
         return [];
