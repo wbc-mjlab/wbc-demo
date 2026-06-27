@@ -1,4 +1,10 @@
-# Web clip-data format (`wbc_web_clips_v1`)
+# Web clip-data format (`wbc_web_clips_v1`) — SUPERSEDED
+
+> **SUPERSEDED (2026-06-27).** The demo pivoted to a **live mujoco-wasm + onnxruntime-web
+> engine** that renders the *simulated* state — there is no precomputed full-body pose
+> playback. The live policy consumes the compact **reference command** instead — see
+> [`REFERENCE_STREAM.md`](REFERENCE_STREAM.md). This spec is retained only as a possible
+> starting point for the parked no-WASM playback fallback (backlog wbc-mjlab-ukl).
 
 The contract between the **exporter** (`wbc-mjlab` `export-web-policy`, issue wbc-mjlab-5uw)
 and the **playback renderer** (issue wbc-mjlab-3ne). Both MUST implement exactly this.

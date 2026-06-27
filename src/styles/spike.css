@@ -1,0 +1,64 @@
+/* Spike chrome (issue wbc-mjlab-x2t). Isolated from the gallery styling. */
+.spike {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  background: var(--color-viewport-bg, #0a0d12);
+  color: var(--color-text, #e6edf3);
+  font: 13px/1.4 var(--font-sans, system-ui, sans-serif);
+}
+.spike__bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0.9rem;
+  border-bottom: 1px solid var(--color-grid-major, #2a3340);
+  background: rgba(0, 0, 0, 0.25);
+}
+.spike__bar strong {
+  letter-spacing: 0.02em;
+}
+.spike__status {
+  flex: 1;
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
+.spike__btn {
+  font: inherit;
+  color: inherit;
+  background: var(--color-accent, #5b8def);
+  border: 0;
+  border-radius: 6px;
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+}
+.spike__btn:hover {
+  filter: brightness(1.1);
+}
+.spike__viewport {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+}
+.spike__viewport canvas {
+  display: block;
+}
+.spike__metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.1rem;
+  padding: 0.5rem 0.9rem;
+  border-top: 1px solid var(--color-grid-major, #2a3340);
+  background: rgba(0, 0, 0, 0.25);
+  font-variant-numeric: tabular-nums;
+}
+.spike__kv {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: baseline;
+}
+.spike__kv em {
+  opacity: 0.6;
+  font-style: normal;
+}

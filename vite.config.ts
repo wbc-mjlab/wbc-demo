@@ -16,6 +16,10 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html'),
         policy: resolve(__dirname, 'policy.html'),
+        // De-risking spike (issue wbc-mjlab-x2t): mujoco-wasm G1 bring-up.
+        // Isolated entry so the gallery build is unaffected. Remove once the
+        // productionised live engine (wbc-mjlab-uxq) lands.
+        'spike-mujoco': resolve(__dirname, 'spike-mujoco.html'),
       },
     },
   },

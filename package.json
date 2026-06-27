@@ -12,6 +12,7 @@
     "validate": "tsx scripts/validate.ts"
   },
   "dependencies": {
+    "@mujoco/mujoco": "^3.10.0",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "js-yaml": "^5.2.0",
