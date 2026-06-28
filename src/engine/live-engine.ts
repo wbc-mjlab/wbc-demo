@@ -66,6 +66,14 @@ const SOLVER_LS_ITER = 20;
 const INTEGRATOR = 'implicitfast';
 const SCENE_XML = 'scene_g1.xml';
 
+// Auto-liedown on fall: when the base sinks low AND tips over for a sustained
+// run of control steps while up, stop trying to recover and latch to the down
+// state holding the liedown pose (deploy: operator commands FloorReady). The
+// robot then lies still until a Get-up command.
+const FALL_HEIGHT = 0.45; // base height (m); below this = sunk
+const FALL_TILT = -0.5;   // upright proj gz (-1 upright, ~0 horizontal); above = tipped over
+const FALL_LATCH_STEPS = 30; // sustained low+tipped control steps (~0.6 s @ 50 Hz) → latch
+
 // The 34 STL basenames referenced by scene_g1.xml.
 const MESH_FILES = [
   'pelvis.STL', 'pelvis_contour_link.STL',
@@ -384,6 +392,8 @@ export async function createLiveEngine(
   let stream: ReferenceStream;
   let clipFrame = 0;
   let fellFrames = 0;
+  let fallLatch = 0;          // control-rate sustained-fall counter (auto-liedown)
+  let enteringFallen = false; // guards the async fall→down transition
   let follow = opts.follow !== false;
   let loopClip = false;
   let speed = 1;
@@ -534,6 +544,65 @@ export async function createLiveEngine(
     syncFsmStatus();
   }
 
+  /**
+   * Robot fell while up → latch to the down state holding the liedown pose, as
+   * if an operator had commanded it down (deploy: FloorReady). Does not teleport
+   * the sim: the robot keeps the pose it fell into and the policy settles it onto
+   * the liedown reference's final lying frame instead of flailing to recover.
+   * Recover with a Get-up command.
+   */
+  async function enterFallenState(): Promise<void> {
+    if (enteringFallen) return;
+    enteringFallen = true;
+    const c = resolvePoseClip(refIndex, clipManifest, 'liedown');
+    if (!c) {
+      enteringFallen = false; // no liedown reference → leave behavior unchanged
+      return;
+    }
+    activeKind = 'pose_liedown';
+    await loadClipStream(c);
+    clipFrame = Math.max(0, stream.frames - 1); // hold the final lying pose
+    controller.resetActions();                  // fresh policy episode; don't move the robot
+    // FSM → down, as if a liedown clip had just finished (canGetup becomes true).
+    fsm.robotIsUp = false;
+    fsm.clipPlaybackActive = false;
+    fsm.awaitingClipSelect = false;
+    fsm.playbackFinished = true;
+    fsm.currentKind = 'pose_liedown';
+    status.playing = false;
+    fellFrames = 0;
+    syncFsmStatus();
+    msg('Robot fell — lying down. Press Get-up (↑) to recover.');
+    enteringFallen = false;
+  }
+
+  /** Per-control-step watchdog: a sustained low + tipped base while up auto-liedowns. */
+  function maybeAutoLiedown(): void {
+    // Skip during liedown playback (it sinks the base by design), during getup
+    // (robotIsUp is false then), and once already down.
+    if (enteringFallen || activeKind === 'pose_liedown' || !fsm.robotIsUp) {
+      fallLatch = 0;
+      return;
+    }
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const xpos: any = sim.data.xpos;
+    const xquat: any = sim.data.xquat;
+    /* eslint-enable @typescript-eslint/no-explicit-any */
+    const b = controller.baseBodyId;
+    const h = xpos[b * 3 + 2] as number;
+    const qw = xquat[b * 4] as number;
+    const qx = xquat[b * 4 + 1] as number;
+    const qy = xquat[b * 4 + 2] as number;
+    const qz = xquat[b * 4 + 3] as number;
+    const gz = -(qw * qw - qx * qx - qy * qy + qz * qz); // -1 upright, ~0 horizontal
+    if (h < FALL_HEIGHT && gz > FALL_TILT) fallLatch += 1;
+    else { fallLatch = 0; return; }
+    if (fallLatch >= FALL_LATCH_STEPS) {
+      fallLatch = 0;
+      void enterFallenState();
+    }
+  }
+
   const startClip =
     browsableClips.find((c) => c.id === opts.startClipId) ??
     defaultBrowsableClip(browsableClips, clipManifest);
@@ -581,6 +650,7 @@ export async function createLiveEngine(
         clipFrame += 1;
       }
     }
+    maybeAutoLiedown();
   }
 
   function frame(): void {
@@ -640,7 +710,7 @@ export async function createLiveEngine(
     const qz = xquat[b * 4 + 3] as number;
     const gz = -(qw * qw - qx * qx - qy * qy + qz * qz);
     status.upright = +gz.toFixed(3);
-    if (h < 0.45 && fsm.robotIsUp) fellFrames += 1;
+    if (h < FALL_HEIGHT && fsm.robotIsUp) fellFrames += 1;
     else fellFrames = 0;
     status.fell = fsm.robotIsUp && fellFrames >= 1;
   }
