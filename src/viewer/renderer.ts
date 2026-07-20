@@ -12,6 +12,7 @@ import {
   AmbientLight,
   Box3,
   BoxGeometry,
+  CanvasTexture,
   Color,
   DirectionalLight,
   Fog,
@@ -25,7 +26,9 @@ import {
   PerspectiveCamera,
   PlaneGeometry,
   PMREMGenerator,
+  RepeatWrapping,
   Scene,
+  SRGBColorSpace,
   Vector3,
   WebGLRenderer,
 } from 'three';
@@ -40,6 +43,43 @@ function token(name: string, fallback: string): string {
     .getPropertyValue(name)
     .trim();
   return value || fallback;
+}
+
+/** 64² canvas: solid floor + 1 m cell lines (minor every cell, major every 5). */
+function makeFloorGridTexture(
+  floorHex: string,
+  minorHex: string,
+  majorHex: string,
+): CanvasTexture {
+  const n = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = n;
+  canvas.height = n;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = floorHex;
+  ctx.fillRect(0, 0, n, n);
+  ctx.strokeStyle = minorHex;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0.5, 0);
+  ctx.lineTo(0.5, n);
+  ctx.moveTo(0, 0.5);
+  ctx.lineTo(n, 0.5);
+  ctx.stroke();
+  // Stronger edge for the 5-cell major (drawn on every tile corner → every 5th world cell
+  // when tiled; GridHelper carries the true major cadence).
+  ctx.strokeStyle = majorHex;
+  ctx.globalAlpha = 0.35;
+  ctx.beginPath();
+  ctx.moveTo(0.5, 0);
+  ctx.lineTo(0.5, n);
+  ctx.moveTo(0, 0.5);
+  ctx.lineTo(n, 0.5);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  const tex = new CanvasTexture(canvas);
+  tex.colorSpace = SRGBColorSpace;
+  return tex;
 }
 
 export interface ViewerOptions {
@@ -76,6 +116,14 @@ export class Viewer {
   private readonly shadowsEnabled: boolean;
   private rafId = 0;
   private disposed = false;
+  /** Visual ground plane — snapped under the camera so it never runs out. */
+  private floor: Mesh | null = null;
+  private grid: GridHelper | null = null;
+  private readonly groundSnap = new Vector3();
+  /** World-space cell size for floor texture + grid (metres). */
+  private static readonly GROUND_CELL = 1;
+  /** Half-extent of the visible ground patch (metres); re-centered each frame. */
+  private static readonly GROUND_SIZE = 120;
 
   constructor(container: HTMLElement, options: ViewerOptions = {}) {
     this.container = container;
@@ -84,11 +132,11 @@ export class Viewer {
     this.scene = new Scene();
     const bg = new Color(token('--color-viewport-bg', '#16283a'));
     this.scene.background = bg;
-    // Soft depth falloff — same idea as mujoco_wasm's haze fog.
-    this.scene.fog = new Fog(bg, 12, 22);
+    // Soft depth falloff — far enough that the re-centered ground never shows an edge.
+    this.scene.fog = new Fog(bg, 28, 70);
 
     const { clientWidth: w, clientHeight: h } = this.sizedContainer();
-    this.camera = new PerspectiveCamera(50, w / h, 0.01, 100);
+    this.camera = new PerspectiveCamera(50, w / h, 0.01, 200);
     this.camera.position.set(2.5, 1.8, 3.0);
 
     this.renderer = new WebGLRenderer({ antialias: true });
@@ -170,28 +218,70 @@ export class Viewer {
   }
 
   private addGround(receiveShadow: boolean): void {
+    const size = Viewer.GROUND_SIZE;
+    const cell = Viewer.GROUND_CELL;
+    const floorColor = token('--color-floor', '#2a455c');
+    const major = token('--color-grid-major', '#429eb0');
+    const minor = token('--color-grid-minor', '#2f7a8a');
+
+    // One repeating cell → identical floor pattern everywhere (no finite edge).
+    const tex = makeFloorGridTexture(floorColor, minor, major);
+    tex.wrapS = RepeatWrapping;
+    tex.wrapT = RepeatWrapping;
+    tex.repeat.set(size / cell, size / cell);
+    tex.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+    tex.needsUpdate = true;
+
     const floor = new Mesh(
-      new PlaneGeometry(40, 40),
+      new PlaneGeometry(size, size),
       new MeshStandardMaterial({
-        color: new Color(token('--color-floor', '#2a455c')),
-        roughness: 0.88,
+        map: tex,
+        color: new Color(0xffffff),
+        roughness: 0.92,
         metalness: 0,
-        envMapIntensity: 0.04,
+        envMapIntensity: 0.03,
       }),
     );
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = receiveShadow;
     floor.name = 'floor';
     this.scene.add(floor);
+    this.floor = floor;
 
+    const divisions = Math.round(size / cell);
     const grid = new GridHelper(
-      20,
-      40,
-      new Color(token('--color-grid-major', '#429eb0')),
-      new Color(token('--color-grid-minor', '#2f7a8a')),
+      size,
+      divisions,
+      new Color(major),
+      new Color(minor),
     );
     grid.position.y = 0.002;
+    // Slight transparency so the textured floor still reads under the lines.
+    const mats = Array.isArray(grid.material) ? grid.material : [grid.material];
+    for (const mat of mats) {
+      mat.transparent = true;
+      mat.opacity = 0.55;
+      mat.depthWrite = false;
+    }
     this.scene.add(grid);
+    this.grid = grid;
+  }
+
+  /** Keep floor + grid under the look-at point so Gen locomotion never leaves the patch. */
+  private snapGround(): void {
+    if (!this.floor || !this.grid) return;
+    const cell = Viewer.GROUND_CELL;
+    const tx = this.controls.target.x;
+    const tz = this.controls.target.z;
+    this.groundSnap.set(
+      Math.round(tx / cell) * cell,
+      0,
+      Math.round(tz / cell) * cell,
+    );
+    this.floor.position.x = this.groundSnap.x;
+    this.floor.position.z = this.groundSnap.z;
+    this.grid.position.x = this.groundSnap.x;
+    this.grid.position.z = this.groundSnap.z;
   }
 
   /**
@@ -263,6 +353,7 @@ export class Viewer {
     if (this.disposed) return;
     this.rafId = requestAnimationFrame(this.animate);
     this.controls.update();
+    this.snapGround();
     this.renderer.render(this.scene, this.camera);
   };
 

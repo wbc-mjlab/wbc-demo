@@ -58,21 +58,27 @@ import {
 } from './wbc-fsm';
 import { loadPolicy, type PolicyRunner } from './policy-runner';
 import { makeWbcController, type WbcController } from './wbc-controller';
+import {
+  createGenReferenceEngine,
+  type GenReferenceEngine,
+} from './gen-reference-engine';
+import { makeGenProprioReader, type GenProprioReader } from './gen-proprio';
+import { clamp, playRange } from './gen-params';
 
 // Training-parity physics timing (wbc-mjlab SimulationCfg / MujocoCfg).
 const PHYS_TIMESTEP = 0.005;
+
+/** Stick/key cruise × boost, then clamped to gen play_vel_ranges. */
+const CRUISE_VX: [number, number] = [-0.8, 1.2];
+const CRUISE_VY: [number, number] = [-0.8, 0.8];
+const CRUISE_WZ: [number, number] = [-1.2, 1.2];
+const VEL_BOOST_MIN = 1.0;
+const VEL_BOOST_MAX = 2.5;
+const DEFAULT_STAND_HEIGHT = 0.8;
 const SOLVER_ITER = 10;
 const SOLVER_LS_ITER = 20;
 const INTEGRATOR = 'implicitfast';
 const SCENE_XML = 'scene_g1.xml';
-
-// Auto-liedown on fall: when the base sinks low AND tips over for a sustained
-// run of control steps while up, stop trying to recover and latch to the down
-// state holding the liedown pose (deploy: operator commands FloorReady). The
-// robot then lies still until a Get-up command.
-const FALL_HEIGHT = 0.45; // base height (m); below this = sunk
-const FALL_TILT = -0.5;   // upright proj gz (-1 upright, ~0 horizontal); above = tipped over
-const FALL_LATCH_STEPS = 30; // sustained low+tipped control steps (~0.6 s @ 50 Hz) → latch
 
 // The 34 STL basenames referenced by scene_g1.xml.
 const MESH_FILES = [
@@ -92,6 +98,16 @@ const MESH_FILES = [
 ];
 
 export type EngineMode = 'policy' | 'open-loop';
+/** Reference source: motion clips vs Gen locomotion (deploy clips | gen). */
+export type RefSource = 'clips' | 'gen';
+
+/** Held teleop axes in [-1, 1]; boost in [0, 1] (Shift ≈ RT). */
+export interface GenTeleopInput {
+  forward: number;
+  strafe: number;
+  yaw: number;
+  boost: number;
+}
 
 export interface LiveStatus {
   ready: boolean;
@@ -106,6 +122,12 @@ export interface LiveStatus {
   realtime: number | null;
   speed: number;
   mode: EngineMode;
+  refSource: RefSource;
+  genAvailable: boolean;
+  genVx: number | null;
+  genVy: number | null;
+  genWz: number | null;
+  genHeight: number | null;
   clipId: string | null;
   clipName: string | null;
   clipFrame: number | null;
@@ -121,6 +143,7 @@ export interface LiveStatus {
   canGetup: boolean;
   canLiedown: boolean;
   canBrowse: boolean;
+  canEnterGen: boolean;
   clipKind: ClipKind;
 }
 
@@ -138,6 +161,12 @@ export interface LiveEngineOptions {
   lowQuality?: boolean;
   /** Enable click-drag-to-perturb on the robot (per-policy page). */
   interactiveDrag?: boolean;
+  /**
+   * Gen params folder URL (trailing slash), e.g.
+   * `/wbc-demo/policies/g1-samples/gen/params/`. When omitted, tries
+   * `{policyBaseUrl}gen/params/`. Missing Gen assets disable Gen mode.
+   */
+  genParamsBaseUrl?: string;
   /** Called ~once/second with a fresh status snapshot. */
   onStatus?: (s: Readonly<LiveStatus>) => void;
   /** Called once the clip list is known (for building a picker). */
@@ -171,6 +200,18 @@ export interface LiveEngineHandle {
   /** Playback/sim-time multiplier (clamped 0.1–4). */
   setSpeed(x: number): void;
   setMode(m: EngineMode): void;
+  /** Enter Gen locomotion (Standing only). Returns false if unavailable / down. */
+  enterGen(): Promise<boolean>;
+  /** Leave Gen → clip select (default idle hold). */
+  exitGen(): Promise<void>;
+  /** Toggle clips ↔ gen. */
+  toggleGen(): Promise<boolean>;
+  /** Update held Gen teleop axes (W/S, Q/E strafe, A/D yaw, Shift). */
+  setGenTeleop(input: Partial<GenTeleopInput>): void;
+  /** Nudge Gen height command (deploy D-pad); Gen-only. */
+  nudgeGenHeight(deltaM: number): void;
+  /** Reset Gen height to idle stand (0.80 m). */
+  resetGenHeight(): void;
   /** Shove the base with a horizontal impulse (m/s); random direction. */
   perturb(magnitude?: number): void;
   /** Re-frame the camera on the robot. */
@@ -200,11 +241,13 @@ export async function createLiveEngine(
     ready: false, error: null, loadMs: null,
     obsDim: null, modelObsDim: null, actionDim: null, decimation: null,
     controlHz: null, fps: null, realtime: null, speed: 1, mode: 'policy',
+    refSource: 'clips', genAvailable: false,
+    genVx: null, genVy: null, genWz: null, genHeight: null,
     clipId: null, clipName: null, clipFrame: null, clipFrames: null,
     pelvisHeight: null, upright: null, fell: false,
     playing: opts.autoplay !== false, inferMs: null, loop: false,
     robotIsUp: true, fsmLabel: 'select', canGetup: false, canLiedown: false,
-    canBrowse: true, clipKind: 'browsable',
+    canBrowse: true, canEnterGen: false, clipKind: 'browsable',
   };
   const msg = (s: string) => opts.onMessage?.(s);
   const t0 = performance.now();
@@ -260,6 +303,21 @@ export async function createLiveEngine(
     status.error = m; opts.onError?.(m); throw new Error(m);
   }
 
+  // Optional Gen locomotion reference (deploy GenReferenceEngine).
+  let gen: GenReferenceEngine | null = null;
+  let genProprio: GenProprioReader | null = null;
+  const genParamsUrl =
+    opts.genParamsBaseUrl ?? `${opts.policyBaseUrl}gen/params/`;
+  try {
+    msg('Loading generator ONNX…');
+    gen = await createGenReferenceEngine(genParamsUrl);
+    status.genAvailable = true;
+    msg(`Generator ready (${gen.params.inputDim}→${gen.params.outputDim})`);
+  } catch (err) {
+    status.genAvailable = false;
+    msg(`Generator unavailable: ${String(err)}`);
+  }
+
   const viewer = new Viewer(container, { lowQuality: opts.lowQuality });
   const ph = viewer.robotRoot.getObjectByName('placeholder-robot');
   if (ph) viewer.robotRoot.remove(ph);
@@ -267,6 +325,9 @@ export async function createLiveEngine(
     sim, parent: viewer.robotRoot, includeGroups: new Set([1, 2]),
   });
   const controller: WbcController = makeWbcController({ sim, cfg, policy });
+  if (gen) {
+    genProprio = makeGenProprioReader(sim, gen.params, controller.baseBodyId);
+  }
 
   // ---- interactive drag-to-perturb (GEAR-SONIC style) ----------------------
   // Click-drag a body to apply a spring force toward the cursor, written to
@@ -358,7 +419,6 @@ export async function createLiveEngine(
     /* eslint-disable @typescript-eslint/no-explicit-any */
     const xpos: any = sim.data.xpos;
     const xfrc: any = sim.data.xfrc_applied;
-    const mass = (sim.model.body_mass as any)[grabBody] as number;
     /* eslint-enable @typescript-eslint/no-explicit-any */
     const bx = xpos[grabBody * 3] as number;
     const by = xpos[grabBody * 3 + 1] as number;
@@ -367,11 +427,12 @@ export async function createLiveEngine(
     const tx = targetThree.x;
     const ty = -targetThree.z;
     const tz = targetThree.y;
-    const K = 120; // spring stiffness, N per (kg·m)
-    const maxF = 800;
-    let fx = K * mass * (tx - bx);
-    let fy = K * mass * (ty - by);
-    let fz = K * mass * (tz - bz);
+    // Body-independent spring (no mass scale — was K*mass, so torso >> hand).
+    const K = 105; // N/m
+    const maxF = 300; // N
+    let fx = K * (tx - bx);
+    let fy = K * (ty - by);
+    let fz = K * (tz - bz);
     const m = Math.hypot(fx, fy, fz);
     if (m > maxF) { const s = maxF / m; fx *= s; fy *= s; fz *= s; }
     xfrc[grabBody * 6] = fx;
@@ -392,12 +453,13 @@ export async function createLiveEngine(
   let stream: ReferenceStream;
   let clipFrame = 0;
   let fellFrames = 0;
-  let fallLatch = 0;          // control-rate sustained-fall counter (auto-liedown)
-  let enteringFallen = false; // guards the async fall→down transition
   let follow = opts.follow !== false;
   let loopClip = false;
   let speed = 1;
   let mode: EngineMode = 'policy';
+  let refSource: RefSource = 'clips';
+  const genTeleop: GenTeleopInput = { forward: 0, strafe: 0, yaw: 0, boost: 0 };
+  let lastGenArc: Float32Array | null = null;
   const followTarget = new Vector3();
   const viewCenter = new Vector3();
   const viewSize = new Vector3();
@@ -416,12 +478,100 @@ export async function createLiveEngine(
 
   function syncFsmStatus(): void {
     status.robotIsUp = fsm.robotIsUp;
-    status.fsmLabel = fsmUiLabel(fsm);
-    status.canGetup = canGetup(fsm);
-    status.canLiedown = canLiedown(fsm);
-    status.canBrowse = canBrowseClips(fsm);
+    status.fsmLabel = refSource === 'gen' ? 'gen' : fsmUiLabel(fsm);
+    status.canGetup = refSource === 'clips' && canGetup(fsm);
+    status.canLiedown = refSource === 'clips' && canLiedown(fsm);
+    status.canBrowse = refSource === 'clips' && canBrowseClips(fsm);
+    status.canEnterGen = Boolean(gen) && fsm.robotIsUp && refSource === 'clips';
     status.clipKind = activeKind;
+    status.refSource = refSource;
     opts.onFsm?.(status);
+  }
+
+  function cruiseFromAxis(axis: number, lo: number, hi: number): number {
+    // Deploy stick_to_cruise: asymmetric map from [-1,1] stick to [lo,hi].
+    if (axis >= 0) return axis * hi;
+    return axis * (-lo); // lo typically negative
+  }
+
+  function genCmdFromTeleop(): { vx: number; vy: number; wz: number } {
+    if (!gen) return { vx: 0, vy: 0, wz: 0 };
+    const boost =
+      VEL_BOOST_MIN +
+      (VEL_BOOST_MAX - VEL_BOOST_MIN) * clamp(genTeleop.boost, 0, 1);
+    const [pxLo, pxHi] = playRange(gen.params, 'lin_vel_x', [-1.5, 4.0]);
+    const [pyLo, pyHi] = playRange(gen.params, 'lin_vel_y', [-2, 2]);
+    const [pzLo, pzHi] = playRange(gen.params, 'ang_vel_z', [-4, 4]);
+    const vx = clamp(
+      cruiseFromAxis(genTeleop.forward, CRUISE_VX[0], CRUISE_VX[1]) * boost,
+      pxLo,
+      pxHi,
+    );
+    const vy = clamp(
+      cruiseFromAxis(genTeleop.strafe, CRUISE_VY[0], CRUISE_VY[1]) * boost,
+      pyLo,
+      pyHi,
+    );
+    const wz = clamp(
+      cruiseFromAxis(genTeleop.yaw, CRUISE_WZ[0], CRUISE_WZ[1]) * boost,
+      pzLo,
+      pzHi,
+    );
+    return { vx, vy, wz };
+  }
+
+  async function enterGen(): Promise<boolean> {
+    if (!gen || !genProprio) {
+      msg('Generator not loaded');
+      return false;
+    }
+    if (!fsm.robotIsUp) {
+      msg('Down — getup before Gen');
+      return false;
+    }
+    if (refSource === 'gen') return true;
+    // Stop clip playback; Gen owns the Arc from here.
+    status.playing = false;
+    enterClipSelectMode(fsm);
+    gen.reset();
+    gen.seedHeight(DEFAULT_STAND_HEIGHT);
+    // Warm history like deploy (~20 proprio pushes).
+    for (let i = 0; i < 20; i++) gen.pushProprio(genProprio.sample());
+    refSource = 'gen';
+    lastGenArc = null;
+    controller.resetActions();
+    syncFsmStatus();
+    msg('Switched to Generator — W/S move, Q/E strafe, A/D turn, Shift boost, ↑↓ height');
+    return true;
+  }
+
+  async function exitGen(): Promise<void> {
+    if (refSource !== 'gen') return;
+    refSource = 'clips';
+    lastGenArc = null;
+    status.genVx = null;
+    status.genVy = null;
+    status.genWz = null;
+    status.genHeight = null;
+    // Return to default idle hold (deploy mode_clips → enter_stand_hold).
+    const idle =
+      defaultBrowsableClip(browsableClips, clipManifest) ?? browsableClips[0];
+    if (idle) {
+      fsm.selectedBrowsableIndex = Math.max(0, browsableClips.indexOf(idle));
+      await loadClip(idle, 'browsable', false, false);
+    } else {
+      enterClipSelectMode(fsm);
+      syncFsmStatus();
+    }
+    msg('Switched to clips');
+  }
+
+  async function toggleGen(): Promise<boolean> {
+    if (refSource === 'gen') {
+      await exitGen();
+      return false;
+    }
+    return enterGen();
   }
 
   async function loadClipStream(c: ReferenceClip): Promise<void> {
@@ -468,6 +618,7 @@ export async function createLiveEngine(
   }
 
   async function selectClip(id: string): Promise<void> {
+    if (refSource === 'gen') return;
     const idx = browsableClips.findIndex((x) => x.id === id);
     const c = idx >= 0 ? browsableClips[idx] : browsableClips[0];
     if (!c) throw new Error('no browsable clips');
@@ -476,6 +627,7 @@ export async function createLiveEngine(
   }
 
   async function playSelectedClip(): Promise<void> {
+    if (refSource === 'gen') return;
     if (!canPlaySelectedClip(fsm)) return;
     const c = browsableClips[fsm.selectedBrowsableIndex];
     if (!c) return;
@@ -483,6 +635,7 @@ export async function createLiveEngine(
   }
 
   async function browseNextClip(): Promise<void> {
+    if (refSource === 'gen') return;
     browseNext(fsm, browsableClips.length);
     syncFsmStatus();
     if (!canBrowseClips(fsm)) return;
@@ -491,6 +644,7 @@ export async function createLiveEngine(
   }
 
   async function browsePrevClip(): Promise<void> {
+    if (refSource === 'gen') return;
     browsePrev(fsm, browsableClips.length);
     syncFsmStatus();
     if (!canBrowseClips(fsm)) return;
@@ -499,6 +653,7 @@ export async function createLiveEngine(
   }
 
   async function triggerGetup(): Promise<void> {
+    if (refSource === 'gen') return;
     if (!canGetup(fsm)) return;
     const c = resolvePoseClip(refIndex, clipManifest, 'getup');
     if (!c) {
@@ -509,6 +664,7 @@ export async function createLiveEngine(
   }
 
   async function triggerLiedown(): Promise<void> {
+    if (refSource === 'gen') return;
     if (!canLiedown(fsm)) return;
     const c = resolvePoseClip(refIndex, clipManifest, 'liedown');
     if (!c) {
@@ -518,15 +674,38 @@ export async function createLiveEngine(
     await loadClip(c, 'pose_liedown', true, false);
   }
 
-  function resetToStart(): void {
-    clipFrame = 0;
-    controller.resetToReference(stream.frame(0));
-    robot.sync(sim);
+  /** Teleport robot onto the current Arc pose; leave clip/Gen mode alone. */
+  function resetSimState(): void {
+    let ref: Float32Array;
+    if (refSource === 'gen' && gen) {
+      if (lastGenArc) {
+        ref = lastGenArc;
+      } else {
+        // Idle stand Arc from Gen defaults (before first step).
+        ref = new Float32Array(gen.params.outputDim);
+        ref[0] = DEFAULT_STAND_HEIGHT;
+        ref[9] = -1; // projected gravity z
+        const dj = gen.params.defaultJointPos;
+        for (let j = 0; j < dj.length && 10 + j < ref.length; j++) {
+          ref[10 + j] = dj[j]!;
+        }
+      }
+      controller.resetToReference(ref);
+      robot.sync(sim);
+      gen.reset();
+      gen.seedHeight(gen.heightCmd());
+      if (genProprio) {
+        for (let i = 0; i < 20; i++) gen.pushProprio(genProprio.sample());
+      }
+    } else {
+      // Keep clip frame / FSM; only re-seed qpos/qvel from the current Arc.
+      ref = stream.frame(clipFrame);
+      controller.resetToReference(ref);
+      robot.sync(sim);
+    }
     status.fell = false;
     fellFrames = 0;
     followInit = false;
-    if (fsm.robotIsUp) enterClipSelectMode(fsm);
-    syncFsmStatus();
   }
 
   function finishClipPlayback(): void {
@@ -542,65 +721,6 @@ export async function createLiveEngine(
     onClipFinished(fsm);
     status.playing = false;
     syncFsmStatus();
-  }
-
-  /**
-   * Robot fell while up → latch to the down state holding the liedown pose, as
-   * if an operator had commanded it down (deploy: FloorReady). Does not teleport
-   * the sim: the robot keeps the pose it fell into and the policy settles it onto
-   * the liedown reference's final lying frame instead of flailing to recover.
-   * Recover with a Get-up command.
-   */
-  async function enterFallenState(): Promise<void> {
-    if (enteringFallen) return;
-    enteringFallen = true;
-    const c = resolvePoseClip(refIndex, clipManifest, 'liedown');
-    if (!c) {
-      enteringFallen = false; // no liedown reference → leave behavior unchanged
-      return;
-    }
-    activeKind = 'pose_liedown';
-    await loadClipStream(c);
-    clipFrame = Math.max(0, stream.frames - 1); // hold the final lying pose
-    controller.resetActions();                  // fresh policy episode; don't move the robot
-    // FSM → down, as if a liedown clip had just finished (canGetup becomes true).
-    fsm.robotIsUp = false;
-    fsm.clipPlaybackActive = false;
-    fsm.awaitingClipSelect = false;
-    fsm.playbackFinished = true;
-    fsm.currentKind = 'pose_liedown';
-    status.playing = false;
-    fellFrames = 0;
-    syncFsmStatus();
-    msg('Robot fell — lying down. Press Get-up (↑) to recover.');
-    enteringFallen = false;
-  }
-
-  /** Per-control-step watchdog: a sustained low + tipped base while up auto-liedowns. */
-  function maybeAutoLiedown(): void {
-    // Skip during liedown playback (it sinks the base by design), during getup
-    // (robotIsUp is false then), and once already down.
-    if (enteringFallen || activeKind === 'pose_liedown' || !fsm.robotIsUp) {
-      fallLatch = 0;
-      return;
-    }
-    /* eslint-disable @typescript-eslint/no-explicit-any */
-    const xpos: any = sim.data.xpos;
-    const xquat: any = sim.data.xquat;
-    /* eslint-enable @typescript-eslint/no-explicit-any */
-    const b = controller.baseBodyId;
-    const h = xpos[b * 3 + 2] as number;
-    const qw = xquat[b * 4] as number;
-    const qx = xquat[b * 4 + 1] as number;
-    const qy = xquat[b * 4 + 2] as number;
-    const qz = xquat[b * 4 + 3] as number;
-    const gz = -(qw * qw - qx * qx - qy * qy + qz * qz); // -1 upright, ~0 horizontal
-    if (h < FALL_HEIGHT && gz > FALL_TILT) fallLatch += 1;
-    else { fallLatch = 0; return; }
-    if (fallLatch >= FALL_LATCH_STEPS) {
-      fallLatch = 0;
-      void enterFallenState();
-    }
   }
 
   const startClip =
@@ -631,10 +751,26 @@ export async function createLiveEngine(
 
   async function controlStep(): Promise<void> {
     const tI = performance.now();
-    if (mode === 'policy') {
-      await controller.step(stream.frame(clipFrame));
+    let refFrame: Float32Array;
+    if (refSource === 'gen' && gen && genProprio) {
+      gen.pushProprio(genProprio.sample());
+      const { vx, vy, wz } = genCmdFromTeleop();
+      status.genVx = +vx.toFixed(2);
+      status.genVy = +vy.toFixed(2);
+      status.genWz = +wz.toFixed(2);
+      status.genHeight = +gen.heightCmd().toFixed(2);
+      lastGenArc = await gen.step(vx, vy, wz);
+      refFrame = lastGenArc;
+      // Gen always "plays" while active.
+      status.playing = true;
     } else {
-      controller.holdReference(stream.frame(clipFrame));
+      refFrame = stream.frame(clipFrame);
+    }
+
+    if (mode === 'policy') {
+      await controller.step(refFrame);
+    } else {
+      controller.holdReference(refFrame);
     }
     inferAccum += performance.now() - tI;
     inferCount += 1;
@@ -643,14 +779,13 @@ export async function createLiveEngine(
       sim.mujoco.mj_step(sim.model, sim.data);
     }
     ctrlCount += 1;
-    if (status.playing && fsm.clipPlaybackActive) {
+    if (refSource === 'clips' && status.playing && fsm.clipPlaybackActive) {
       if (clipFrame >= stream.frames - 1) {
         finishClipPlayback();
       } else {
         clipFrame += 1;
       }
     }
-    maybeAutoLiedown();
   }
 
   function frame(): void {
@@ -688,6 +823,7 @@ export async function createLiveEngine(
       status.clipFrame = clipFrame;
       status.speed = speed;
       status.mode = mode;
+      status.refSource = refSource;
       updateLiveSignals();
       opts.onStatus?.(status);
       ctrlCount = 0; frameCount = 0; inferAccum = 0; inferCount = 0;
@@ -710,7 +846,7 @@ export async function createLiveEngine(
     const qz = xquat[b * 4 + 3] as number;
     const gz = -(qw * qw - qx * qx - qy * qy + qz * qz);
     status.upright = +gz.toFixed(3);
-    if (h < FALL_HEIGHT && fsm.robotIsUp) fellFrames += 1;
+    if (h < 0.45 && fsm.robotIsUp) fellFrames += 1;
     else fellFrames = 0;
     status.fell = fsm.robotIsUp && fellFrames >= 1;
   }
@@ -787,7 +923,7 @@ export async function createLiveEngine(
       status.playing = !status.playing;
       return status.playing;
     },
-    reset() { resetToStart(); },
+    reset() { resetSimState(); },
     selectClip,
     playSelectedClip,
     browseNextClip,
@@ -798,6 +934,25 @@ export async function createLiveEngine(
     setMode(m: EngineMode) {
       mode = m; status.mode = m;
       if (m === 'open-loop') controller.resetActions();
+    },
+    enterGen,
+    exitGen,
+    toggleGen,
+    setGenTeleop(input: Partial<GenTeleopInput>) {
+      if (input.forward != null) genTeleop.forward = clamp(input.forward, -1, 1);
+      if (input.strafe != null) genTeleop.strafe = clamp(input.strafe, -1, 1);
+      if (input.yaw != null) genTeleop.yaw = clamp(input.yaw, -1, 1);
+      if (input.boost != null) genTeleop.boost = clamp(input.boost, 0, 1);
+    },
+    nudgeGenHeight(deltaM: number) {
+      if (refSource !== 'gen' || !gen) return;
+      gen.setHeightCmd(gen.heightCmd() + deltaM);
+      status.genHeight = +gen.heightCmd().toFixed(2);
+    },
+    resetGenHeight() {
+      if (refSource !== 'gen' || !gen) return;
+      gen.seedHeight(DEFAULT_STAND_HEIGHT);
+      status.genHeight = +gen.heightCmd().toFixed(2);
     },
     perturb(magnitude = 3.0) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -820,6 +975,7 @@ export async function createLiveEngine(
       running = false;
       cancelAnimationFrame(rafId);
       detachDrag?.();
+      void gen?.dispose();
       viewer.dispose();
     },
   };
