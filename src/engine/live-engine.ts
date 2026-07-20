@@ -100,6 +100,8 @@ const MESH_FILES = [
 export type EngineMode = 'policy' | 'open-loop';
 /** Reference source: motion clips vs Gen locomotion (deploy clips | gen). */
 export type RefSource = 'clips' | 'gen';
+/** Orbit (default) vs GTA-style chase behind the robot. */
+export type CameraMode = 'orbit' | 'chase';
 
 /** Held teleop axes in [-1, 1]; boost in [0, 1] (Shift ≈ RT). */
 export interface GenTeleopInput {
@@ -123,6 +125,7 @@ export interface LiveStatus {
   speed: number;
   mode: EngineMode;
   refSource: RefSource;
+  cameraMode: CameraMode;
   genAvailable: boolean;
   genVx: number | null;
   genVy: number | null;
@@ -217,6 +220,10 @@ export interface LiveEngineHandle {
   /** Re-frame the camera on the robot. */
   reframe(): void;
   setFollow(on: boolean): void;
+  /** GTA-style third-person chase behind the robot (Key V). */
+  setChase(on: boolean): void;
+  /** Toggle chase ↔ orbit. Returns whether chase is now on. */
+  toggleChase(): boolean;
   /** Loop the current browsable clip when it reaches the end. */
   setLoop(on: boolean): void;
   /** Move the viewport canvas into a new container (engine-pool reuse). */
@@ -241,7 +248,7 @@ export async function createLiveEngine(
     ready: false, error: null, loadMs: null,
     obsDim: null, modelObsDim: null, actionDim: null, decimation: null,
     controlHz: null, fps: null, realtime: null, speed: 1, mode: 'policy',
-    refSource: 'clips', genAvailable: false,
+    refSource: 'clips', cameraMode: 'orbit', genAvailable: false,
     genVx: null, genVy: null, genWz: null, genHeight: null,
     clipId: null, clipName: null, clipFrame: null, clipFrames: null,
     pelvisHeight: null, upright: null, fell: false,
@@ -454,6 +461,7 @@ export async function createLiveEngine(
   let clipFrame = 0;
   let fellFrames = 0;
   let follow = opts.follow !== false;
+  let chase = false;
   let loopClip = false;
   let speed = 1;
   let mode: EngineMode = 'policy';
@@ -463,6 +471,9 @@ export async function createLiveEngine(
   const followTarget = new Vector3();
   const viewCenter = new Vector3();
   const viewSize = new Vector3();
+  const chaseCam = new Vector3();
+  const chaseLook = new Vector3();
+  const chaseFwd = new Vector3();
   let followInit = false;
 
   const browsableClips = clipManifest
@@ -811,7 +822,8 @@ export async function createLiveEngine(
     }
 
     robot.sync(sim);
-    if (follow) followRobot();
+    if (chase) chaseRobot();
+    else if (follow) followRobot();
     frameCount += 1;
 
     if (now - windowStart >= 1000) {
@@ -824,6 +836,7 @@ export async function createLiveEngine(
       status.speed = speed;
       status.mode = mode;
       status.refSource = refSource;
+      status.cameraMode = chase ? 'chase' : 'orbit';
       updateLiveSignals();
       opts.onStatus?.(status);
       ctrlCount = 0; frameCount = 0; inferAccum = 0; inferCount = 0;
@@ -882,6 +895,92 @@ export async function createLiveEngine(
     viewer.camera.position.x += dx;
     viewer.camera.position.y += dy;
     viewer.camera.position.z += dz;
+  }
+
+  /** Rotate MuJoCo body +X by world quat (w,x,y,z) → world vector. */
+  function quatApplyFwd(
+    qw: number, qx: number, qy: number, qz: number,
+  ): [number, number, number] {
+    const vx = 1;
+    const vy = 0;
+    const vz = 0;
+    const txv = 2 * (qy * vz - qz * vy);
+    const tyv = 2 * (qz * vx - qx * vz);
+    const tzv = 2 * (qx * vy - qy * vx);
+    return [
+      vx + qw * txv + (qy * tzv - qz * tyv),
+      vy + qw * tyv + (qz * txv - qx * tzv),
+      vz + qw * tzv + (qx * tyv - qy * txv),
+    ];
+  }
+
+  /**
+   * GTA-style third person: camera behind pelvis yaw, looking at torso height.
+   * MuJoCo Z-up (x,y,z) → Three Y-up (x, z, -y).
+   */
+  function chaseRobot(): void {
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const xpos: any = sim.data.xpos;
+    const xquat: any = sim.data.xquat;
+    /* eslint-enable @typescript-eslint/no-explicit-any */
+    const b = controller.baseBodyId;
+    const px = xpos[b * 3] as number;
+    const py = xpos[b * 3 + 1] as number;
+    const pz = xpos[b * 3 + 2] as number;
+    const qw = xquat[b * 4] as number;
+    const qx = xquat[b * 4 + 1] as number;
+    const qy = xquat[b * 4 + 2] as number;
+    const qz = xquat[b * 4 + 3] as number;
+
+    let [fx, fy] = quatApplyFwd(qw, qx, qy, qz);
+    // Flatten to horizontal (ignore pitch/roll wobble).
+    const flen = Math.hypot(fx, fy);
+    if (flen < 1e-4) {
+      fx = 1;
+      fy = 0;
+    } else {
+      fx /= flen;
+      fy /= flen;
+    }
+    // MuJoCo forward (fx, fy, 0) → Three (fx, 0, -fy)
+    chaseFwd.set(fx, 0, -fy);
+
+    // Aim mid-body and pull back enough that feet stay in the 50° FOV.
+    const lookY = Math.max(pz * 0.42, 0.5);
+    chaseLook.set(px, lookY, -py);
+
+    const back = 1.9;
+    const up = 0.85;
+    chaseCam.copy(chaseLook).addScaledVector(chaseFwd, -back);
+    chaseCam.y += up;
+
+    const alpha = 0.18;
+    viewer.camera.position.lerp(chaseCam, alpha);
+    viewer.controls.target.lerp(chaseLook, alpha);
+    viewer.camera.lookAt(viewer.controls.target);
+  }
+
+  function setChase(on: boolean): void {
+    chase = on;
+    status.cameraMode = on ? 'chase' : 'orbit';
+    viewer.controls.enabled = !on;
+    if (on) {
+      // Snap once so the first frame isn't a long lerp from orbit.
+      chaseRobot();
+      viewer.camera.position.copy(chaseCam);
+      viewer.controls.target.copy(chaseLook);
+      viewer.camera.lookAt(viewer.controls.target);
+      msg('Camera: chase (3rd person) — V to orbit');
+    } else {
+      followInit = false;
+      viewer.controls.update();
+      msg('Camera: orbit — V for chase');
+    }
+  }
+
+  function toggleChase(): boolean {
+    setChase(!chase);
+    return chase;
   }
 
   function frameViewer(): void {
@@ -963,9 +1062,12 @@ export async function createLiveEngine(
     },
     reframe() { frameViewer(); },
     setFollow(on: boolean) {
+      if (chase && on) setChase(false);
       follow = on;
       followInit = false;
     },
+    setChase,
+    toggleChase,
     setLoop(on: boolean) {
       loopClip = on;
       status.loop = on;

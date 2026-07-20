@@ -141,6 +141,7 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
           <button id="lv-mode" class="live__btn" title="Toggle policy on/off (P)">policy</button>
           <button id="lv-push" class="live__btn" title="Shove the robot">push</button>
           <button id="lv-follow" class="live__btn" title="Follow robot (F)" aria-pressed="true">follow</button>
+          <button id="lv-chase" class="live__btn" title="GTA chase cam (V)" aria-pressed="false">chase</button>
           <button id="lv-loop" class="live__btn" title="Loop clip" aria-pressed="false">loop</button>
           <button id="lv-play" class="live__btn live__btn--primary" title="Play / pause (Space)">⏸&nbsp;pause</button>
           <button id="lv-reset" class="live__btn" title="Reset sim pose (R)">↺&nbsp;reset</button>
@@ -157,6 +158,7 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
                 <tr><th scope="row"><kbd>Space</kbd></th><td>Play / pause clip</td></tr>
                 <tr><th scope="row"><kbd>R</kbd></th><td>Reset sim pose</td></tr>
                 <tr><th scope="row"><kbd>F</kbd></th><td>Toggle camera follow</td></tr>
+                <tr><th scope="row"><kbd>V</kbd></th><td>Toggle GTA chase cam (3rd person)</td></tr>
                 <tr><th scope="row"><kbd>P</kbd></th><td>Policy on / off</td></tr>
                 <tr><th scope="row"><kbd>?</kbd></th><td>Show / hide this panel</td></tr>
                 <tr><th scope="row">Drag</th><td>Perturb robot</td></tr>
@@ -218,6 +220,7 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
   const modeEl = $<HTMLButtonElement>('#lv-mode');
   const pushEl = $<HTMLButtonElement>('#lv-push');
   const followEl = $<HTMLButtonElement>('#lv-follow');
+  const chaseEl = $<HTMLButtonElement>('#lv-chase');
   const loopEl = $<HTMLButtonElement>('#lv-loop');
   const playEl = $<HTMLButtonElement>('#lv-play');
   const resetEl = $<HTMLButtonElement>('#lv-reset');
@@ -325,6 +328,7 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
     },
     wire(h: LiveEngineHandle) {
       let following = true;
+      let chasing = false;
 
       const syncModeButton = (): void => {
         modeEl.textContent = mode;
@@ -333,8 +337,21 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
       };
 
       const syncFollowButton = (): void => {
-        followEl.setAttribute('aria-pressed', String(following));
-        followEl.title = following ? 'Follow on (F)' : 'Follow off (F)';
+        followEl.setAttribute('aria-pressed', String(following && !chasing));
+        followEl.disabled = chasing;
+        followEl.title = chasing
+          ? 'Follow (disabled in chase — press V)'
+          : following ? 'Follow on (F)' : 'Follow off (F)';
+      };
+
+      const syncChaseButton = (): void => {
+        chaseEl.setAttribute('aria-pressed', String(chasing));
+        chaseEl.classList.toggle('live__btn--warn', chasing);
+        chaseEl.textContent = chasing ? 'orbit' : 'chase';
+        chaseEl.title = chasing
+          ? 'Leave chase → orbit (V)'
+          : 'GTA chase cam behind robot (V)';
+        syncFollowButton();
       };
 
       const syncTeleopFromKeys = (keys: Set<string>): void => {
@@ -371,9 +388,15 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
       });
       pushEl.addEventListener('click', () => h.perturb());
       followEl.addEventListener('click', () => {
+        if (chasing) return;
         following = !following;
         h.setFollow(following);
         syncFollowButton();
+      });
+      chaseEl.addEventListener('click', () => {
+        chasing = h.toggleChase();
+        if (chasing) following = true;
+        syncChaseButton();
       });
       loopEl.addEventListener('click', () => {
         const on = loopEl.getAttribute('aria-pressed') !== 'true';
@@ -389,6 +412,7 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
       });
 
       syncFollowButton();
+      syncChaseButton();
       syncGenButton();
 
       const onKeyDown = (e: KeyboardEvent): void => {
@@ -454,9 +478,16 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
             break;
           case 'KeyF':
             e.preventDefault();
+            if (chasing) break;
             following = !following;
             h.setFollow(following);
             syncFollowButton();
+            break;
+          case 'KeyV':
+            e.preventDefault();
+            chasing = h.toggleChase();
+            if (chasing) following = true;
+            syncChaseButton();
             break;
           case 'KeyP':
             e.preventDefault();
