@@ -1,0 +1,77 @@
+# wbc_gen_deploy_params_v1 robot='g1' overlay='wbc_ref'
+schema_version: wbc_gen_deploy_params_v1
+robot_id: g1
+overlay: wbc_ref
+step_dt: 0.02
+joint_names: [left_hip_pitch_joint, left_hip_roll_joint, left_hip_yaw_joint, left_knee_joint,
+  left_ankle_pitch_joint, left_ankle_roll_joint, right_hip_pitch_joint, right_hip_roll_joint,
+  right_hip_yaw_joint, right_knee_joint, right_ankle_pitch_joint, right_ankle_roll_joint,
+  waist_yaw_joint, waist_roll_joint, waist_pitch_joint, left_shoulder_pitch_joint,
+  left_shoulder_roll_joint, left_shoulder_yaw_joint, left_elbow_joint, left_wrist_roll_joint,
+  left_wrist_pitch_joint, left_wrist_yaw_joint, right_shoulder_pitch_joint, right_shoulder_roll_joint,
+  right_shoulder_yaw_joint, right_elbow_joint, right_wrist_roll_joint, right_wrist_pitch_joint,
+  right_wrist_yaw_joint]
+joint_ids_map: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+  19, 20, 21, 22, 23, 24, 25, 26, 27, 28]
+default_joint_pos: [-0.1, 0.0, 0.0, 0.3, -0.2, 0.0, -0.1, 0.0, 0.0, 0.3, -0.2, 0.0,
+  0.0, 0.0, 0.0, 0.35, 0.18, 0.0, 0.87, 0.0, 0.0, 0.0, 0.35, -0.18, 0.0, 0.87, 0.0,
+  0.0, 0.0]
+state:
+  observation_names: [base_ang_vel, projected_gravity, joint_pos_rel, joint_vel_rel]
+  history_length: 10
+  concatenate_terms: true
+  flatten_history_dim: true
+  observations:
+    base_ang_vel:
+      training_name: base_ang_vel
+      deploy_name: base_ang_vel
+      dim: 3
+      flat_width: 30
+      history_length: 10
+      scale: [1.0, 1.0, 1.0]
+    projected_gravity:
+      training_name: projected_gravity
+      deploy_name: projected_gravity
+      dim: 3
+      flat_width: 30
+      history_length: 10
+      scale: [1.0, 1.0, 1.0]
+    joint_pos_rel:
+      training_name: joint_pos
+      deploy_name: joint_pos_rel
+      dim: 29
+      flat_width: 290
+      history_length: 10
+      scale: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+        1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    joint_vel_rel:
+      training_name: joint_vel
+      deploy_name: joint_vel_rel
+      dim: 29
+      flat_width: 290
+      history_length: 10
+      scale: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+        1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+command:
+  packing: xy_then_height_then_angle
+  horizons: [15, 30, 60]
+  position_scale: 3.6
+  xy_features_per_horizon: 2
+  height_features_per_horizon: 1
+  angle_features_per_horizon: 2
+  term_names: [cmd_xy_waypoints, cmd_height_waypoints, cmd_angle_waypoints]
+  height_lowpass_tau: 0.1
+outputs:
+  field_order: [ref_base_height, ref_base_lin_vel_b, ref_base_ang_vel_b, ref_gravity_b,
+    ref_joint_pos]
+  field_dims: {ref_base_height: 1, ref_base_lin_vel_b: 3, ref_base_ang_vel_b: 3, ref_gravity_b: 3,
+    ref_joint_pos: 29}
+  layout: arc_reference
+dims: {input_dim: 655, state_dim: 640, command_dim: 15, output_dim: 39}
+model: {type: flow_ae, onnx_file: generator.onnx, onnx_input_name: obs, onnx_output_name: reference,
+  n_euler_steps: 4, latent_dim: 256}
+play_vel_ranges:
+  lin_vel_x: [-1.5, 4.0]
+  lin_vel_y: [-2.0, 2.0]
+  ang_vel_z: [-4.0, 4.0]
+  height: [0.75, 0.85]

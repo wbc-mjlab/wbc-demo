@@ -13,6 +13,9 @@ static site to **GitHub Pages**.
   Scroll to bring more to life; click one to dive in.
 - **Per-policy page** — full-screen viewport with live controls: clip switch,
   speed, a policy/open-loop toggle, a "push" perturbation, and camera framing.
+  Press **G** (or the **gen** button) for Generator locomotion (W/S, Q/E strafe, A/D turn, Shift),
+  same Arc→WBC path as [wbc-g1-deploy](https://github.com/wbc-mjlab/wbc-g1-deploy)
+  `wbc_reference_node` Gen mode (`policies/<id>/gen/params/`).
 - **Deploy-aligned clip UX** — browsable clips come from
   `policies/<id>/reference/manifest.yaml` (same idea as
   [wbc-g1-deploy](https://github.com/wbc-mjlab/wbc-g1-deploy) `config/clips/manifest.yaml`).

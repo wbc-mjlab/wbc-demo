@@ -11,7 +11,7 @@
 import './styles/app.css';
 import './styles/live.css';
 import { getDefaultLivePolicy, getPolicy } from './registry';
-import { createLiveEngine, type EngineMode, type LiveStatus, type LiveEngineHandle } from './engine/live-engine';
+import { createLiveEngine, type EngineMode, type LiveStatus, type LiveEngineHandle, type RefSource } from './engine/live-engine';
 import type { ReferenceClip } from './engine/policy-config';
 import type { PolicyLinks } from './types';
 
@@ -80,9 +80,14 @@ function render(): void {
   const ui = buildUi(root, manifest.name, githubHref(manifest.links));
 
   const mjcfBaseUrl = `${import.meta.env.BASE_URL}robots/${robot}/mjcf/`;
+  const genRel = manifest.artifacts?.gen;
+  const genParamsBaseUrl = genRel
+    ? `${baseUrl}${genRel.endsWith('/') ? genRel : `${genRel}/`}`
+    : undefined;
   createLiveEngine(ui.viewport, {
     policyBaseUrl: baseUrl,
     mjcfBaseUrl,
+    genParamsBaseUrl,
     startClipId: startClip,
     autoplay: true,
     follow: true,
@@ -124,6 +129,7 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
           <button id="lv-next" class="live__btn" title="Next clip (→)">▶</button>
           <button id="lv-getup" class="live__btn" title="Get up from floor (↑)">get up</button>
           <button id="lv-liedown" class="live__btn" title="Lie down when idle (↓)">lie down</button>
+          <button id="lv-gen" class="live__btn" title="Generator locomotion (G)" aria-pressed="false" disabled>gen</button>
           <label class="live__select"><span>speed</span>
             <select id="lv-speed">
               <option value="0.25">0.25×</option>
@@ -137,26 +143,58 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
           <button id="lv-follow" class="live__btn" title="Follow robot (F)" aria-pressed="true">follow</button>
           <button id="lv-loop" class="live__btn" title="Loop clip" aria-pressed="false">loop</button>
           <button id="lv-play" class="live__btn live__btn--primary" title="Play / pause (Space)">⏸&nbsp;pause</button>
-          <button id="lv-reset" class="live__btn" title="Reset (R)">↺&nbsp;reset</button>
+          <button id="lv-reset" class="live__btn" title="Reset sim pose (R)">↺&nbsp;reset</button>
         </div>
       </header>
 
       <details class="live__keys" id="lv-keys" open>
         <summary class="live__keys-toggle">controls</summary>
-        <table class="live__keys-table">
-          <tbody>
-            <tr><th scope="row"><kbd>Space</kbd></th><td>Play / pause</td></tr>
-            <tr><th scope="row"><kbd>R</kbd></th><td>Reset clip</td></tr>
-            <tr><th scope="row"><kbd>←</kbd> <kbd>→</kbd></th><td>Previous / next clip (auto-play)</td></tr>
-            <tr><th scope="row"><kbd>↑</kbd> <kbd>↓</kbd></th><td>Get up / lie down</td></tr>
-            <tr><th scope="row"><kbd>F</kbd></th><td>Toggle follow</td></tr>
-            <tr><th scope="row"><kbd>P</kbd></th><td>Policy on / off</td></tr>
-            <tr><th scope="row"><kbd>?</kbd></th><td>Show / hide this panel</td></tr>
-            <tr><th scope="row">Clip picker</th><td>Auto-play on change</td></tr>
-            <tr><th scope="row">Loop</th><td>Repeat clip when finished</td></tr>
-            <tr><th scope="row">Drag</th><td>Perturb robot</td></tr>
-          </tbody>
-        </table>
+        <div class="live__keys-body">
+          <section class="live__keys-pane" aria-labelledby="lv-keys-general">
+            <h3 class="live__keys-heading" id="lv-keys-general">General</h3>
+            <table class="live__keys-table">
+              <tbody>
+                <tr><th scope="row"><kbd>Space</kbd></th><td>Play / pause clip</td></tr>
+                <tr><th scope="row"><kbd>R</kbd></th><td>Reset sim pose</td></tr>
+                <tr><th scope="row"><kbd>F</kbd></th><td>Toggle camera follow</td></tr>
+                <tr><th scope="row"><kbd>P</kbd></th><td>Policy on / off</td></tr>
+                <tr><th scope="row"><kbd>?</kbd></th><td>Show / hide this panel</td></tr>
+                <tr><th scope="row">Drag</th><td>Perturb robot</td></tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section class="live__keys-pane" aria-labelledby="lv-keys-clips">
+            <h3 class="live__keys-heading" id="lv-keys-clips">Clips</h3>
+            <table class="live__keys-table">
+              <tbody>
+                <tr><th scope="row"><kbd>←</kbd> <kbd>→</kbd></th><td>Previous / next clip</td></tr>
+                <tr><th scope="row"><kbd>↑</kbd></th><td>Get up (when down)</td></tr>
+                <tr><th scope="row"><kbd>↓</kbd></th><td>Lie down (when idle)</td></tr>
+                <tr><th scope="row">Loop</th><td>Repeat clip when finished</td></tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section class="live__keys-pane live__keys-pane--gen" id="lv-keys-gen" aria-labelledby="lv-keys-gen-title">
+            <h3 class="live__keys-heading" id="lv-keys-gen-title">
+              Generator
+              <span class="live__keys-badge" id="lv-keys-gen-badge">off</span>
+            </h3>
+            <p class="live__keys-note">Press <kbd>G</kbd> or the <strong>gen</strong> button to enter. Standing only.</p>
+            <table class="live__keys-table">
+              <tbody>
+                <tr><th scope="row"><kbd>G</kbd></th><td>Toggle Gen ↔ clips</td></tr>
+                <tr><th scope="row"><kbd>W</kbd> <kbd>S</kbd></th><td>Forward / back</td></tr>
+                <tr><th scope="row"><kbd>Q</kbd> <kbd>E</kbd></th><td>Strafe left / right</td></tr>
+                <tr><th scope="row"><kbd>A</kbd> <kbd>D</kbd></th><td>Yaw left / right</td></tr>
+                <tr><th scope="row"><kbd>Shift</kbd></th><td>Velocity boost</td></tr>
+                <tr><th scope="row"><kbd>↑</kbd> <kbd>↓</kbd></th><td>Height up / down</td></tr>
+                <tr><th scope="row"><kbd>H</kbd></th><td>Reset height (0.80 m)</td></tr>
+              </tbody>
+            </table>
+          </section>
+        </div>
       </details>
 
       <footer class="live__telemetry" id="lv-metrics"></footer>
@@ -175,6 +213,7 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
   const nextEl = $<HTMLButtonElement>('#lv-next');
   const getupEl = $<HTMLButtonElement>('#lv-getup');
   const liedownEl = $<HTMLButtonElement>('#lv-liedown');
+  const genEl = $<HTMLButtonElement>('#lv-gen');
   const speedEl = $<HTMLSelectElement>('#lv-speed');
   const modeEl = $<HTMLButtonElement>('#lv-mode');
   const pushEl = $<HTMLButtonElement>('#lv-push');
@@ -183,20 +222,41 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
   const playEl = $<HTMLButtonElement>('#lv-play');
   const resetEl = $<HTMLButtonElement>('#lv-reset');
   const keysEl = $<HTMLDetailsElement>('#lv-keys');
+  const genPaneEl = $<HTMLElement>('#lv-keys-gen');
+  const genBadgeEl = $<HTMLElement>('#lv-keys-gen-badge');
 
   let latest: LiveStatus | undefined;
   let playing = true;
   let mode: EngineMode = 'policy';
+  let refSource: RefSource = 'clips';
 
   function renderState(): void {
     let state = 'live', label = 'live';
     if (latest?.error) { state = 'fell'; label = 'error'; }
+    else if (refSource === 'gen' && latest?.ready) { state = 'live'; label = 'gen'; }
     else if (mode === 'open-loop' && latest?.ready) { state = 'paused'; label = 'open-loop'; }
     else if (latest?.fell) { state = 'fell'; label = 'fell'; }
     else if (!latest?.ready) { state = 'boot'; label = 'boot'; }
     else if (!playing) { state = 'paused'; label = 'paused'; }
     rootEl.dataset.state = state;
     stateEl.textContent = label;
+  }
+
+  function syncGenButton(): void {
+    const avail = latest?.genAvailable === true;
+    const down = latest != null && !latest.robotIsUp;
+    genEl.disabled = !avail || (down && refSource !== 'gen');
+    genEl.setAttribute('aria-pressed', String(refSource === 'gen'));
+    genEl.classList.toggle('live__btn--warn', refSource === 'gen');
+    genEl.textContent = refSource === 'gen' ? 'clips' : 'gen';
+    genEl.title = refSource === 'gen'
+      ? 'Leave Generator → clips (G)'
+      : 'Enter Generator locomotion (G)';
+
+    const genOn = refSource === 'gen';
+    genPaneEl.dataset.active = genOn ? 'true' : 'false';
+    genBadgeEl.textContent = !avail ? 'n/a' : genOn ? 'on' : 'off';
+    genBadgeEl.dataset.tone = !avail ? 'muted' : genOn ? 'on' : 'off';
   }
 
   return {
@@ -213,21 +273,25 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
         .join('');
     },
     updateFsm(s: LiveStatus) {
+      refSource = s.refSource;
       clipEl.disabled = !s.canBrowse;
       prevEl.disabled = !s.canBrowse;
       nextEl.disabled = !s.canBrowse;
       getupEl.disabled = !s.canGetup;
       liedownEl.disabled = !s.canLiedown;
+      syncGenButton();
     },
     updateMetrics(s: LiveStatus) {
       latest = s;
       playing = s.playing;
+      refSource = s.refSource;
       playEl.innerHTML = playing ? '⏸&nbsp;pause' : '▶&nbsp;play';
       loopEl.setAttribute('aria-pressed', String(s.loop));
       renderState();
       this.updateFsm(s);
-      metricsEl.innerHTML = [
+      const metrics = [
         tm('fsm', s.fsmLabel),
+        tm('ref', s.refSource),
         tm('pose', s.robotIsUp ? 'up' : 'down', s.robotIsUp ? 'ok' : 'warn'),
         tm('realtime', s.realtime != null ? `${s.realtime}×` : '…', toneRealtime(s.realtime)),
         tm('speed', `${s.speed}×`),
@@ -236,12 +300,26 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
         tm('infer', s.inferMs != null ? `${s.inferMs} ms` : '…'),
         tm('upright', s.upright != null ? s.upright.toFixed(2) : '…', toneUpright(s.upright)),
         tm('pelvis z', s.pelvisHeight != null ? `${s.pelvisHeight} m` : '…', tonePelvis(s.pelvisHeight)),
-        tm('frame', s.clipFrame != null ? `${s.clipFrame}/${s.clipFrames}` : '…'),
+      ];
+      if (s.refSource === 'gen') {
+        metrics.push(
+          tm('vx', s.genVx ?? '…'),
+          tm('vy', s.genVy ?? '…'),
+          tm('wz', s.genWz ?? '…'),
+          tm('h', s.genHeight != null ? `${s.genHeight} m` : '…'),
+        );
+      } else {
+        metrics.push(tm('frame', s.clipFrame != null ? `${s.clipFrame}/${s.clipFrames}` : '…'));
+      }
+      metrics.push(
         tm('mode', s.mode),
         tm('load', s.loadMs != null ? `${s.loadMs} ms` : '…'),
-      ].join('');
-      if (s.clipFrame != null && s.clipFrames) {
+      );
+      metricsEl.innerHTML = metrics.join('');
+      if (s.clipFrame != null && s.clipFrames && s.refSource === 'clips') {
         progressEl.style.width = `${((s.clipFrame / s.clipFrames) * 100).toFixed(1)}%`;
+      } else if (s.refSource === 'gen') {
+        progressEl.style.width = '100%';
       }
       if (clipEl.value !== s.clipId && s.clipId) clipEl.value = s.clipId;
     },
@@ -259,11 +337,32 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
         followEl.title = following ? 'Follow on (F)' : 'Follow off (F)';
       };
 
+      const syncTeleopFromKeys = (keys: Set<string>): void => {
+        if (refSource !== 'gen') {
+          h.setGenTeleop({ forward: 0, strafe: 0, yaw: 0, boost: 0 });
+          return;
+        }
+        const forward = (keys.has('KeyW') ? 1 : 0) + (keys.has('KeyS') ? -1 : 0);
+        const strafe = (keys.has('KeyQ') ? 1 : 0) + (keys.has('KeyE') ? -1 : 0);
+        const yaw = (keys.has('KeyA') ? 1 : 0) + (keys.has('KeyD') ? -1 : 0);
+        const boost = keys.has('ShiftLeft') || keys.has('ShiftRight') ? 1 : 0;
+        h.setGenTeleop({ forward, strafe, yaw, boost });
+      };
+
+      const heldKeys = new Set<string>();
+
       clipEl.addEventListener('change', () => void h.selectClip(clipEl.value));
       prevEl.addEventListener('click', () => void h.browsePrevClip());
       nextEl.addEventListener('click', () => void h.browseNextClip());
       getupEl.addEventListener('click', () => void h.triggerGetup());
       liedownEl.addEventListener('click', () => void h.triggerLiedown());
+      genEl.addEventListener('click', () => {
+        void h.toggleGen().then((on) => {
+          refSource = on ? 'gen' : 'clips';
+          syncGenButton();
+          renderState();
+        });
+      });
       speedEl.addEventListener('change', () => h.setSpeed(parseFloat(speedEl.value)));
       modeEl.addEventListener('click', () => {
         mode = mode === 'policy' ? 'open-loop' : 'policy';
@@ -283,20 +382,31 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
       });
       resetEl.addEventListener('click', () => h.reset());
       playEl.addEventListener('click', () => {
+        if (refSource === 'gen') return; // Gen always runs
         playing = h.toggle();
         playEl.innerHTML = playing ? '⏸&nbsp;pause' : '▶&nbsp;play';
         renderState();
       });
 
       syncFollowButton();
+      syncGenButton();
 
-      const onKey = (e: KeyboardEvent): void => {
-        if (e.repeat) return;
+      const onKeyDown = (e: KeyboardEvent): void => {
         const el = e.target;
         if (!(el instanceof HTMLElement)) return;
         if (el.isContentEditable) return;
         const tag = el.tagName;
         if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+        // Continuous Gen teleop (allow repeats for held keys via Set).
+        if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'ShiftLeft', 'ShiftRight'].includes(e.code)) {
+          heldKeys.add(e.code);
+          syncTeleopFromKeys(heldKeys);
+          if (refSource === 'gen') e.preventDefault();
+          return;
+        }
+
+        if (e.repeat) return;
 
         switch (e.code) {
           case 'KeyR':
@@ -305,6 +415,7 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
             break;
           case 'Space':
             e.preventDefault();
+            if (refSource === 'gen') break;
             playing = h.toggle();
             playEl.innerHTML = playing ? '⏸&nbsp;pause' : '▶&nbsp;play';
             renderState();
@@ -319,11 +430,27 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
             break;
           case 'ArrowUp':
             e.preventDefault();
-            if (!getupEl.disabled) void h.triggerGetup();
+            if (refSource === 'gen') h.nudgeGenHeight(0.05);
+            else if (!getupEl.disabled) void h.triggerGetup();
             break;
           case 'ArrowDown':
             e.preventDefault();
-            if (!liedownEl.disabled) void h.triggerLiedown();
+            if (refSource === 'gen') h.nudgeGenHeight(-0.05);
+            else if (!liedownEl.disabled) void h.triggerLiedown();
+            break;
+          case 'KeyG':
+            e.preventDefault();
+            void h.toggleGen().then((on) => {
+              refSource = on ? 'gen' : 'clips';
+              heldKeys.clear();
+              syncTeleopFromKeys(heldKeys);
+              syncGenButton();
+              renderState();
+            });
+            break;
+          case 'KeyH':
+            e.preventDefault();
+            if (refSource === 'gen') h.resetGenHeight();
             break;
           case 'KeyF':
             e.preventDefault();
@@ -346,9 +473,17 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
         }
       };
 
+      const onKeyUp = (e: KeyboardEvent): void => {
+        if (heldKeys.delete(e.code)) syncTeleopFromKeys(heldKeys);
+      };
+
       keyHandlerCleanup?.();
-      window.addEventListener('keydown', onKey);
-      keyHandlerCleanup = () => window.removeEventListener('keydown', onKey);
+      window.addEventListener('keydown', onKeyDown);
+      window.addEventListener('keyup', onKeyUp);
+      keyHandlerCleanup = () => {
+        window.removeEventListener('keydown', onKeyDown);
+        window.removeEventListener('keyup', onKeyUp);
+      };
     },
   };
 }

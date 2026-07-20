@@ -2,7 +2,7 @@
 schemaVersion: '1'
 name: G1 Wbc-G1
 description: Zest Table S4 tracking + RSI, EE z resets, light foot slip / anti-shake,
-  history=1.
+  history=1. Includes Gen locomotion (generator.onnx under gen/params/).
 robot: g1
 tags: [locomotion]
 author: wbc-mjlab
@@ -14,3 +14,5 @@ artifacts:
   onnx: policy.onnx
   config: config.yaml
   clips: {kind: manifest, file: reference/manifest.yaml, default: idle_02}
+  # Optional Gen Arc source (deploy kin overlay). Loaded from gen/params/.
+  gen: gen/params/

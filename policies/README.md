@@ -19,6 +19,7 @@ policies/
     policy.yaml                # the MANIFEST (required) — see below
     policy.onnx                # trained policy network (onnxruntime-web runs it live)
     config.yaml                # deploy obs/action config (schema_version: wbc_tracking_params_v1)
+    gen/params/                # optional Gen locomotion (config.yaml + generator.onnx)
     reference/
       index.json               # all exported clip streams (schema: wbc_reference_stream_v1)
       manifest.yaml            # browsable clip list + pose_clips (mirrors deploy manifest.yaml)
@@ -26,6 +27,9 @@ policies/
     motion_library.yaml        # clip-library provenance (optional)
     thumb.png                  # gallery thumbnail (optional)
 ```
+
+Optional **Gen** mode: ship `gen/params/` (`wbc_gen_deploy_params_v1` + `generator.onnx`)
+and set `artifacts.gen: gen/params/` — the live page then toggles with **G** / **gen**.
 
 - `<policy-id>` is the folder name. It is the **authoritative** id and the URL
   slug (`policy.html?id=<policy-id>`). Use lowercase kebab-case. A manifest may

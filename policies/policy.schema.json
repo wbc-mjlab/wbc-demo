@@ -108,6 +108,10 @@
           "description": "Deploy obs/action config, e.g. \"config.yaml\" (schema_version: wbc_tracking_params_v1). Consumed by the M2 engine to wire the observation/action layout. Playback (M1) does not need it.",
           "$ref": "#/$defs/relPath"
         },
+        "gen": {
+          "description": "Optional Gen params folder (wbc_gen_deploy_params_v1), e.g. \"gen/params/\". Enables Generator locomotion mode alongside clip tracking.",
+          "$ref": "#/$defs/relPath"
+        },
         "clips": {
           "description": "Clip set for playback (issue wbc-mjlab-3ne). Pick ONE form: inline list with display metadata, OR a pointer to a motion_library.yaml manifest.",
           "oneOf": [
