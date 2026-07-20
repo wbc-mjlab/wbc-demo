@@ -100,7 +100,7 @@ const MESH_FILES = [
 export type EngineMode = 'policy' | 'open-loop';
 /** Reference source: motion clips vs Gen locomotion (deploy clips | gen). */
 export type RefSource = 'clips' | 'gen';
-/** Orbit (default) vs GTA-style chase behind the robot. */
+/** Orbit (default) vs third-person chase behind the robot. */
 export type CameraMode = 'orbit' | 'chase';
 
 /** Held teleop axes in [-1, 1]; boost in [0, 1] (Shift ≈ RT). */
@@ -220,7 +220,7 @@ export interface LiveEngineHandle {
   /** Re-frame the camera on the robot. */
   reframe(): void;
   setFollow(on: boolean): void;
-  /** GTA-style third-person chase behind the robot (Key V). */
+  /** Third-person chase behind the robot (Key V). */
   setChase(on: boolean): void;
   /** Toggle chase ↔ orbit. Returns whether chase is now on. */
   toggleChase(): boolean;
@@ -915,7 +915,7 @@ export async function createLiveEngine(
   }
 
   /**
-   * GTA-style third person: camera behind pelvis yaw, looking at torso height.
+   * Chase cam: camera behind pelvis yaw, looking at mid-body (feet in frame).
    * MuJoCo Z-up (x,y,z) → Three Y-up (x, z, -y).
    */
   function chaseRobot(): void {
@@ -945,12 +945,12 @@ export async function createLiveEngine(
     // MuJoCo forward (fx, fy, 0) → Three (fx, 0, -fy)
     chaseFwd.set(fx, 0, -fy);
 
-    // Aim mid-body and pull back enough that feet stay in the 50° FOV.
-    const lookY = Math.max(pz * 0.42, 0.5);
+    // Aim a bit above mid-body so the robot sits slightly lower in the frame.
+    const lookY = Math.max(pz * 0.42, 0.5) + 0.18;
     chaseLook.set(px, lookY, -py);
 
     const back = 1.9;
-    const up = 0.85;
+    const up = 0.9;
     chaseCam.copy(chaseLook).addScaledVector(chaseFwd, -back);
     chaseCam.y += up;
 
@@ -970,7 +970,7 @@ export async function createLiveEngine(
       viewer.camera.position.copy(chaseCam);
       viewer.controls.target.copy(chaseLook);
       viewer.camera.lookAt(viewer.controls.target);
-      msg('Camera: chase (3rd person) — V to orbit');
+      msg('Camera: chase — V to orbit');
     } else {
       followInit = false;
       viewer.controls.update();

@@ -141,7 +141,7 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
           <button id="lv-mode" class="live__btn" title="Toggle policy on/off (P)">policy</button>
           <button id="lv-push" class="live__btn" title="Shove the robot">push</button>
           <button id="lv-follow" class="live__btn" title="Follow robot (F)" aria-pressed="true">follow</button>
-          <button id="lv-chase" class="live__btn" title="GTA chase cam (V)" aria-pressed="false">chase</button>
+          <button id="lv-chase" class="live__btn" title="Chase cam (V)" aria-pressed="false">chase</button>
           <button id="lv-loop" class="live__btn" title="Loop clip" aria-pressed="false">loop</button>
           <button id="lv-play" class="live__btn live__btn--primary" title="Play / pause (Space)">⏸&nbsp;pause</button>
           <button id="lv-reset" class="live__btn" title="Reset sim pose (R)">↺&nbsp;reset</button>
@@ -158,7 +158,7 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
                 <tr><th scope="row"><kbd>Space</kbd></th><td>Play / pause clip</td></tr>
                 <tr><th scope="row"><kbd>R</kbd></th><td>Reset sim pose</td></tr>
                 <tr><th scope="row"><kbd>F</kbd></th><td>Toggle camera follow</td></tr>
-                <tr><th scope="row"><kbd>V</kbd></th><td>Toggle GTA chase cam (3rd person)</td></tr>
+                <tr><th scope="row"><kbd>V</kbd></th><td>Toggle chase cam</td></tr>
                 <tr><th scope="row"><kbd>P</kbd></th><td>Policy on / off</td></tr>
                 <tr><th scope="row"><kbd>?</kbd></th><td>Show / hide this panel</td></tr>
                 <tr><th scope="row">Drag</th><td>Perturb robot</td></tr>
@@ -350,7 +350,7 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
         chaseEl.textContent = chasing ? 'orbit' : 'chase';
         chaseEl.title = chasing
           ? 'Leave chase → orbit (V)'
-          : 'GTA chase cam behind robot (V)';
+          : 'Chase cam behind robot (V)';
         syncFollowButton();
       };
 
