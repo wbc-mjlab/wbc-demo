@@ -21,6 +21,14 @@ import {
   resolveBrowsableClips,
 } from './engine/clip-manifest';
 import type { PolicyEntry } from './types';
+import {
+  THEME_EVENT,
+  initTheme,
+  themeToggleHtml,
+  wireThemeToggle,
+} from './theme';
+
+initTheme();
 
 const EXAMPLE_ID = '_example';
 /** Engine pool size — caps live WebGL contexts + CPU regardless of card count. */
@@ -219,8 +227,13 @@ async function render(): Promise<void> {
 
   root.innerHTML = `
     <header class="site-header">
-      <p class="back-link"><a href="${home}">← demo</a></p>
-      <h1>wbc-mjlab policy demos</h1>
+      <div class="site-header__row">
+        <div>
+          <p class="back-link"><a href="${home}">← demo</a></p>
+          <h1>wbc-mjlab policy demos</h1>
+        </div>
+        ${themeToggleHtml('gallery-theme')}
+      </div>
       <p>
         Interactive in-browser whole-body control. Every card is a motion clip
         tracked <strong>live in its own MuJoCo sim</strong> — scroll to bring more
@@ -228,6 +241,10 @@ async function render(): Promise<void> {
       </p>
     </header>
     <div class="gallery gallery--live" id="grid"></div>`;
+  wireThemeToggle(root.querySelector<HTMLButtonElement>('#gallery-theme'));
+  window.addEventListener(THEME_EVENT, () => {
+    for (const eng of pool) eng.viewer.applyThemeColors();
+  });
   const grid = root.querySelector<HTMLElement>('#grid')!;
 
   // Static (non-live) policies first as simple cards.

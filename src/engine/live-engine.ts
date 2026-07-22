@@ -163,6 +163,11 @@ export interface LiveEngineOptions {
   startClipId?: string;
   /** Begin playing immediately once loaded (default true). */
   autoplay?: boolean;
+  /**
+   * If Gen assets load, enter Generator mode after boot (default true).
+   * Set false to start in clip playback; user can still press G.
+   */
+  startInGen?: boolean;
   /** Pan the camera to follow the base as it locomotes (default true). */
   follow?: boolean;
   /** Cheaper viewport for many simultaneous instances (gallery cards). */
@@ -796,6 +801,9 @@ export async function createLiveEngine(
   }
   fsm.selectedBrowsableIndex = Math.max(0, browsableClips.indexOf(startClip));
   await loadClip(startClip, 'browsable', opts.autoplay !== false, true);
+  if (opts.startInGen !== false && gen) {
+    await enterGen();
+  }
   frameViewer();
   opts.onReady?.(browsableClips);
 
