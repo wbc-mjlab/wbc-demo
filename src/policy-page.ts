@@ -183,7 +183,7 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
               Generator
               <span class="live__keys-badge" id="lv-keys-gen-badge">off</span>
             </h3>
-            <p class="live__keys-note">Press <kbd>G</kbd> or the <strong>gen</strong> button to enter. Standing only.</p>
+            <p class="live__keys-note">Generator starts on by default. Press <kbd>G</kbd> or <strong>clips</strong> to leave. Standing only.</p>
             <table class="live__keys-table">
               <tbody>
                 <tr><th scope="row"><kbd>G</kbd></th><td>Toggle Gen ↔ clips</td></tr>
@@ -413,7 +413,9 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
 
       syncFollowButton();
       syncChaseButton();
+      refSource = h.status.refSource;
       syncGenButton();
+      renderState();
 
       const onKeyDown = (e: KeyboardEvent): void => {
         const el = e.target;
