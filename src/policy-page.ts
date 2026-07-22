@@ -14,6 +14,14 @@ import { getDefaultLivePolicy, getPolicy } from './registry';
 import { createLiveEngine, type EngineMode, type LiveStatus, type LiveEngineHandle, type RefSource } from './engine/live-engine';
 import type { ReferenceClip } from './engine/policy-config';
 import type { PolicyLinks } from './types';
+import {
+  THEME_EVENT,
+  initTheme,
+  themeToggleHtml,
+  wireThemeToggle,
+} from './theme';
+
+initTheme();
 
 const DEMO_REPO_URL = 'https://github.com/wbc-mjlab/wbc-demo';
 
@@ -117,6 +125,7 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
       <header class="live__topbar">
         <a class="live__back" href="${galleryHref()}" title="All clips" aria-label="All clips">←</a>
         <a class="live__back live__github" href="${escapeHtml(repoUrl)}" target="_blank" rel="noopener noreferrer" title="View on GitHub" aria-label="View on GitHub">${GITHUB_ICON}</a>
+        ${themeToggleHtml('lv-theme')}
         <div class="live__brand">
           <span class="live__dot" aria-hidden="true"></span>
           <span class="live__wordmark">${escapeHtml(policyName)}</span>
@@ -227,6 +236,10 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
   const keysEl = $<HTMLDetailsElement>('#lv-keys');
   const genPaneEl = $<HTMLElement>('#lv-keys-gen');
   const genBadgeEl = $<HTMLElement>('#lv-keys-gen-badge');
+  wireThemeToggle($<HTMLButtonElement>('#lv-theme'));
+  window.addEventListener(THEME_EVENT, () => {
+    engine?.viewer.applyThemeColors();
+  });
 
   let latest: LiveStatus | undefined;
   let playing = true;

@@ -107,6 +107,20 @@
   background: var(--color-surface-hover);
   color: var(--color-accent);
 }
+
+.live__topbar .theme-toggle {
+  width: 2rem;
+  height: 2rem;
+  font-size: 0.95rem;
+  background: color-mix(in srgb, var(--color-surface) 78%, transparent);
+  border-color: var(--hairline);
+  color: var(--color-text-muted);
+}
+.live__topbar .theme-toggle:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-surface-hover);
+}
 .live__github svg {
   display: block;
 }

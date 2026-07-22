@@ -267,6 +267,58 @@ export class Viewer {
     this.grid = grid;
   }
 
+  /** Re-read CSS tokens after light/dark theme switch (viewport + ground). */
+  applyThemeColors(): void {
+    const bg = new Color(token('--color-viewport-bg', '#16283a'));
+    this.scene.background = bg;
+    if (this.scene.fog instanceof Fog) {
+      this.scene.fog.color.copy(bg);
+    } else {
+      this.scene.fog = new Fog(bg, 28, 70);
+    }
+
+    const floorColor = token('--color-floor', '#2a455c');
+    const major = token('--color-grid-major', '#429eb0');
+    const minor = token('--color-grid-minor', '#2f7a8a');
+
+    if (this.floor) {
+      const mat = this.floor.material as MeshStandardMaterial;
+      const old = mat.map;
+      const size = Viewer.GROUND_SIZE;
+      const cell = Viewer.GROUND_CELL;
+      const tex = makeFloorGridTexture(floorColor, minor, major);
+      tex.wrapS = RepeatWrapping;
+      tex.wrapT = RepeatWrapping;
+      tex.repeat.set(size / cell, size / cell);
+      tex.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+      tex.needsUpdate = true;
+      mat.map = tex;
+      mat.needsUpdate = true;
+      old?.dispose();
+    }
+
+    if (this.grid) {
+      const mats = Array.isArray(this.grid.material)
+        ? this.grid.material
+        : [this.grid.material];
+      // GridHelper: [0]=major, [1]=minor when two materials.
+      if (mats[0] && 'color' in mats[0]) {
+        (mats[0] as { color: Color }).color.set(major);
+      }
+      if (mats[1] && 'color' in mats[1]) {
+        (mats[1] as { color: Color }).color.set(minor);
+      } else if (mats[0] && 'color' in mats[0] && mats.length === 1) {
+        (mats[0] as { color: Color }).color.set(minor);
+      }
+    }
+
+    const placeholder = this.robotRoot.getObjectByName('placeholder-robot');
+    if (placeholder instanceof Mesh) {
+      const mat = placeholder.material as MeshStandardMaterial;
+      mat.color.set(token('--color-accent', '#5b8def'));
+    }
+  }
+
   /** Keep floor + grid under the look-at point so Gen locomotion never leaves the patch. */
   private snapGround(): void {
     if (!this.floor || !this.grid) return;

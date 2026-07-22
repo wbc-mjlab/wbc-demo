@@ -7,9 +7,12 @@
  * the studio screenshot). Surfaces/neutrals are OBSERVED; the cyan accent and
  * amber are inferred brand proposals. Keep custom-property NAMES stable — every
  * component + renderer.ts (reads --color-* via getComputedStyle) depends on them.
+ *
+ * Default / dark = current brand look. Light = `[data-theme="light"]` on <html>.
  */
 
-:root {
+:root,
+[data-theme="dark"] {
   /* --- Surfaces (observed: deep blue-slate, zero saturation) ------------ */
   --color-bg: #0d1620;            /* page background */
   --color-surface: #16232f;       /* cards, panels */
@@ -40,7 +43,7 @@
   --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
 
-  /* --- Spacing / shape -------------------------------------------------- */
+  /* --- Spacing / rhythm -------------------------------------------------- */
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 1rem;
@@ -50,4 +53,26 @@
 
   /* --- Layout ----------------------------------------------------------- */
   --content-max: 1100px;
+}
+
+[data-theme="light"] {
+  --color-bg: #eef2f6;
+  --color-surface: #ffffff;
+  --color-surface-hover: #e4ebf2;
+  --color-border: #c3ced9;
+
+  --color-text: #1a2433;
+  --color-text-muted: #5c6b7c;
+
+  --color-accent: #0b9aab;
+  --color-accent-hover: #087f8c;
+
+  --color-amber: #b8791a;
+  --color-success: #2a9a64;
+  --color-danger: #d14b4b;
+
+  --color-viewport-bg: #d5e2ee;
+  --color-floor: #c2d3e3;
+  --color-grid-major: #3d7f90;
+  --color-grid-minor: #8aadc0;
 }

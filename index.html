@@ -8,6 +8,17 @@
       name="description"
       content="Interactive in-browser whole-body control demo for wbc-mjlab policies."
     />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('wbc-demo-theme');
+          document.documentElement.dataset.theme =
+            t === 'light' || t === 'dark' ? t : 'dark';
+        } catch (e) {
+          document.documentElement.dataset.theme = 'dark';
+        }
+      })();
+    </script>
   </head>
   <body>
     <main class="page" id="app"></main>
