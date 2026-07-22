@@ -19,8 +19,10 @@ export interface GenCommandCfg {
   positionScale: number;
   xyFeaturesPerHorizon: number;
   heightFeaturesPerHorizon: number;
+  heightSetpointDim: number;
   angleFeaturesPerHorizon: number;
   heightLowpassTau: number;
+  heightScale: number;
 }
 
 export interface GenModelCfg {
@@ -133,8 +135,10 @@ export async function loadGenDeployParams(paramsBaseUrl: string): Promise<GenDep
       positionScale: Number(cmd.position_scale ?? 1),
       xyFeaturesPerHorizon: Number(cmd.xy_features_per_horizon ?? 2),
       heightFeaturesPerHorizon: Number(cmd.height_features_per_horizon ?? 0),
+      heightSetpointDim: Number(cmd.height_setpoint_dim ?? 0),
       angleFeaturesPerHorizon: Number(cmd.angle_features_per_horizon ?? 2),
       heightLowpassTau: Number(cmd.height_lowpass_tau ?? 0.1),
+      heightScale: Number(cmd.height_scale ?? 1),
     },
     inputDim: Number(dims.input_dim),
     stateDim: Number(dims.state_dim),

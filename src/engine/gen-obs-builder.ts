@@ -48,6 +48,10 @@ export class GenObsBuilder {
 
   seedHeight(height: number): void {
     this.heightCmd = height;
+    if (this.params.command.heightSetpointDim > 0) {
+      this.heightWp = new Float32Array([height]);
+      return;
+    }
     const k = this.params.command.horizons.length;
     this.heightWp = new Float32Array(Math.max(k, 0));
     this.heightWp.fill(height);
@@ -130,7 +134,12 @@ export class GenObsBuilder {
     );
 
     let height = new Float32Array(0);
-    if (this.params.command.heightFeaturesPerHorizon > 0) {
+    const scale = this.params.command.heightScale;
+    if (!(scale > 0)) throw new Error('command.height_scale must be positive');
+    if (this.params.command.heightSetpointDim > 0) {
+      height = new Float32Array(this.params.command.heightSetpointDim);
+      height.fill(this.heightCmd / scale);
+    } else if (this.params.command.heightFeaturesPerHorizon > 0) {
       if (this.heightWp.length !== this.params.command.horizons.length) {
         this.seedHeight(this.heightCmd);
       }
@@ -141,7 +150,10 @@ export class GenObsBuilder {
         this.params.command.horizons,
         this.params.command.heightLowpassTau,
       );
-      height = this.heightWp;
+      height = new Float32Array(this.heightWp.length);
+      for (let i = 0; i < this.heightWp.length; i++) {
+        height[i] = this.heightWp[i]! / scale;
+      }
     }
 
     const cmd = packCommandXyHeightAngle(xy, height, ang);
