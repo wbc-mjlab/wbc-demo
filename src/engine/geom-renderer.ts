@@ -98,9 +98,9 @@ export function buildGeomRenderer(opts: {
     const r = g * 4;
     const material = new MeshStandardMaterial({
       color: new Color(geomRgba[r], geomRgba[r + 1], geomRgba[r + 2]),
-      roughness: 0.72,
-      metalness: 0.12,
-      envMapIntensity: 0.12,
+      roughness: 0.82,
+      metalness: 0.06,
+      envMapIntensity: 0.08,
     });
     const mesh = new Mesh(geometry, material);
     mesh.castShadow = true;

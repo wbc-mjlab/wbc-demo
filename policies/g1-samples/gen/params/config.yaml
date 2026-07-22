@@ -54,9 +54,9 @@ state:
         1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 command:
   packing: xy_then_height_setpoint_then_angle
-  horizons: [10, 30, 60]
+  horizons: [15, 30, 60]
   position_scale: 3.6
-  height_scale: 0.6
+  height_scale: 1.0
   xy_features_per_horizon: 2
   height_features_per_horizon: 0
   height_setpoint_dim: 1
@@ -73,7 +73,7 @@ dims: {input_dim: 653, state_dim: 640, command_dim: 13, output_dim: 39}
 model: {type: flow_ae, onnx_file: generator.onnx, onnx_input_name: obs, onnx_output_name: reference,
   n_euler_steps: 4, latent_dim: 256}
 play_vel_ranges:
-  lin_vel_x: [-1.5, 4.5]
+  lin_vel_x: [-1.5, 4.0]
   lin_vel_y: [-2.0, 2.0]
-  ang_vel_z: [-5.0, 5.0]
-  height: [0.0, 0.85]
+  ang_vel_z: [-3.0, 3.0]
+  height: [0.45, 0.85]
