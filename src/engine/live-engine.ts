@@ -68,13 +68,17 @@ import { clamp, playRange } from './gen-params';
 // Training-parity physics timing (wbc-mjlab SimulationCfg / MujocoCfg).
 const PHYS_TIMESTEP = 0.005;
 
-/** Stick/key cruise × boost, then clamped to gen play_vel_ranges. */
-const CRUISE_VX: [number, number] = [-0.8, 1.2];
-const CRUISE_VY: [number, number] = [-0.8, 0.8];
-const CRUISE_WZ: [number, number] = [-1.2, 1.2];
-const VEL_BOOST_MIN = 1.0;
-const VEL_BOOST_MAX = 2.5;
-const DEFAULT_STAND_HEIGHT = 0.8;
+/** Stick/key cruise × gait vel_mult, then clamped to gen play_vel_ranges. */
+const CRUISE_VX: [number, number] = [-1.0, 1.4];
+const CRUISE_VY: [number, number] = [-1.0, 1.0];
+const CRUISE_WZ: [number, number] = [-2.0, 2.0];
+/** Match deploy reference_node gait heights + multipliers (crouch > sprint > walk). */
+const STAND_HEIGHT = 0.81;
+const SPRINT_HEIGHT = 0.75;
+const CROUCH_HEIGHT = 0.55;
+const WALK_VEL_MULT = 1.0;
+const SPRINT_VEL_MULT = 3.5;
+const CROUCH_VEL_MULT = 0.8;
 const SOLVER_ITER = 10;
 const SOLVER_LS_ITER = 20;
 const INTEGRATOR = 'implicitfast';
@@ -103,12 +107,13 @@ export type RefSource = 'clips' | 'gen';
 /** Orbit (default) vs third-person chase behind the robot. */
 export type CameraMode = 'orbit' | 'chase';
 
-/** Held teleop axes in [-1, 1]; boost in [0, 1] (Shift ≈ RT). */
+/** Held teleop axes in [-1, 1]; Shift≈RT sprint, Space≈RB crouch. */
 export interface GenTeleopInput {
   forward: number;
   strafe: number;
   yaw: number;
-  boost: number;
+  sprint: boolean;
+  crouch: boolean;
 }
 
 export interface LiveStatus {
@@ -209,12 +214,10 @@ export interface LiveEngineHandle {
   exitGen(): Promise<void>;
   /** Toggle clips ↔ gen. */
   toggleGen(): Promise<boolean>;
-  /** Update held Gen teleop axes (W/S, Q/E strafe, A/D yaw, Shift). */
+  /** Update held Gen teleop axes (W/S, Q/E strafe, A/D yaw, Shift=sprint, Space=crouch). */
   setGenTeleop(input: Partial<GenTeleopInput>): void;
-  /** Nudge Gen height command (deploy D-pad); Gen-only. */
-  nudgeGenHeight(deltaM: number): void;
-  /** Reset Gen height to idle stand (0.80 m). */
-  resetGenHeight(): void;
+  /** Seed Gen height to stand / sprint / crouch target (usually driven by teleop). */
+  setGenGaitHeight(kind: 'stand' | 'sprint' | 'crouch'): void;
   /** Shove the base with a horizontal impulse (m/s); random direction. */
   perturb(magnitude?: number): void;
   /** Re-frame the camera on the robot. */
@@ -466,7 +469,15 @@ export async function createLiveEngine(
   let speed = 1;
   let mode: EngineMode = 'policy';
   let refSource: RefSource = 'clips';
-  const genTeleop: GenTeleopInput = { forward: 0, strafe: 0, yaw: 0, boost: 0 };
+  const genTeleop: GenTeleopInput = {
+    forward: 0,
+    strafe: 0,
+    yaw: 0,
+    sprint: false,
+    crouch: false,
+  };
+  let gaitCrouchWas = false;
+  let gaitSprintWas = false;
   let lastGenArc: Float32Array | null = null;
   const followTarget = new Vector3();
   const viewCenter = new Vector3();
@@ -505,26 +516,62 @@ export async function createLiveEngine(
     return axis * (-lo); // lo typically negative
   }
 
+  function genVelMult(crouch: boolean, sprint: boolean): number {
+    if (crouch) return CROUCH_VEL_MULT;
+    if (sprint) return SPRINT_VEL_MULT;
+    return WALK_VEL_MULT;
+  }
+
+  function genHeightFor(crouch: boolean, sprint: boolean): number {
+    if (crouch) return CROUCH_HEIGHT;
+    if (sprint) return SPRINT_HEIGHT;
+    return STAND_HEIGHT;
+  }
+
+  function applyGenGaitHeight(seedOnEdge: boolean): void {
+    if (!gen) return;
+    const crouch = genTeleop.crouch;
+    const sprint = genTeleop.sprint;
+    const h = genHeightFor(crouch, sprint);
+    const edge =
+      crouch !== gaitCrouchWas || (sprint !== gaitSprintWas && !crouch);
+    if (seedOnEdge && edge) {
+      gen.seedHeight(h);
+      if (crouch !== gaitCrouchWas) {
+        msg(
+          `Gen crouch ${crouch ? 'ON' : 'OFF'} (h=${h.toFixed(2)} m, vel×${genVelMult(crouch, sprint).toFixed(2)})`,
+        );
+      } else if (sprint !== gaitSprintWas && !crouch) {
+        msg(
+          `Gen sprint ${sprint ? 'ON' : 'OFF'} (h=${h.toFixed(2)} m, vel×${genVelMult(false, sprint).toFixed(2)})`,
+        );
+      }
+    } else {
+      gen.setHeightCmd(h);
+    }
+    gaitCrouchWas = crouch;
+    gaitSprintWas = sprint;
+  }
+
   function genCmdFromTeleop(): { vx: number; vy: number; wz: number } {
     if (!gen) return { vx: 0, vy: 0, wz: 0 };
-    const boost =
-      VEL_BOOST_MIN +
-      (VEL_BOOST_MAX - VEL_BOOST_MIN) * clamp(genTeleop.boost, 0, 1);
-    const [pxLo, pxHi] = playRange(gen.params, 'lin_vel_x', [-1.5, 4.0]);
+    applyGenGaitHeight(true);
+    const velMult = genVelMult(genTeleop.crouch, genTeleop.sprint);
+    const [pxLo, pxHi] = playRange(gen.params, 'lin_vel_x', [-1.5, 4.5]);
     const [pyLo, pyHi] = playRange(gen.params, 'lin_vel_y', [-2, 2]);
-    const [pzLo, pzHi] = playRange(gen.params, 'ang_vel_z', [-4, 4]);
+    const [pzLo, pzHi] = playRange(gen.params, 'ang_vel_z', [-5, 5]);
     const vx = clamp(
-      cruiseFromAxis(genTeleop.forward, CRUISE_VX[0], CRUISE_VX[1]) * boost,
+      cruiseFromAxis(genTeleop.forward, CRUISE_VX[0], CRUISE_VX[1]) * velMult,
       pxLo,
       pxHi,
     );
     const vy = clamp(
-      cruiseFromAxis(genTeleop.strafe, CRUISE_VY[0], CRUISE_VY[1]) * boost,
+      cruiseFromAxis(genTeleop.strafe, CRUISE_VY[0], CRUISE_VY[1]) * velMult,
       pyLo,
       pyHi,
     );
     const wz = clamp(
-      cruiseFromAxis(genTeleop.yaw, CRUISE_WZ[0], CRUISE_WZ[1]) * boost,
+      cruiseFromAxis(genTeleop.yaw, CRUISE_WZ[0], CRUISE_WZ[1]) * velMult,
       pzLo,
       pzHi,
     );
@@ -545,14 +592,20 @@ export async function createLiveEngine(
     status.playing = false;
     enterClipSelectMode(fsm);
     gen.reset();
-    gen.seedHeight(DEFAULT_STAND_HEIGHT);
+    gen.seedHeight(STAND_HEIGHT);
+    gaitCrouchWas = false;
+    gaitSprintWas = false;
+    genTeleop.sprint = false;
+    genTeleop.crouch = false;
     // Warm history like deploy (~20 proprio pushes).
     for (let i = 0; i < 20; i++) gen.pushProprio(genProprio.sample());
     refSource = 'gen';
     lastGenArc = null;
     controller.resetActions();
     syncFsmStatus();
-    msg('Switched to Generator — W/S move, Q/E strafe, A/D turn, Shift boost, ↑↓ height');
+    msg(
+      'Switched to Generator — W/S move, Q/E strafe, A/D turn, Shift=sprint, Space=crouch',
+    );
     return true;
   }
 
@@ -694,7 +747,7 @@ export async function createLiveEngine(
       } else {
         // Idle stand Arc from Gen defaults (before first step).
         ref = new Float32Array(gen.params.outputDim);
-        ref[0] = DEFAULT_STAND_HEIGHT;
+        ref[0] = STAND_HEIGHT;
         ref[9] = -1; // projected gravity z
         const dj = gen.params.defaultJointPos;
         for (let j = 0; j < dj.length && 10 + j < ref.length; j++) {
@@ -1041,16 +1094,14 @@ export async function createLiveEngine(
       if (input.forward != null) genTeleop.forward = clamp(input.forward, -1, 1);
       if (input.strafe != null) genTeleop.strafe = clamp(input.strafe, -1, 1);
       if (input.yaw != null) genTeleop.yaw = clamp(input.yaw, -1, 1);
-      if (input.boost != null) genTeleop.boost = clamp(input.boost, 0, 1);
+      if (input.sprint != null) genTeleop.sprint = Boolean(input.sprint);
+      if (input.crouch != null) genTeleop.crouch = Boolean(input.crouch);
     },
-    nudgeGenHeight(deltaM: number) {
+    setGenGaitHeight(kind: 'stand' | 'sprint' | 'crouch') {
       if (refSource !== 'gen' || !gen) return;
-      gen.setHeightCmd(gen.heightCmd() + deltaM);
-      status.genHeight = +gen.heightCmd().toFixed(2);
-    },
-    resetGenHeight() {
-      if (refSource !== 'gen' || !gen) return;
-      gen.seedHeight(DEFAULT_STAND_HEIGHT);
+      const h =
+        kind === 'crouch' ? CROUCH_HEIGHT : kind === 'sprint' ? SPRINT_HEIGHT : STAND_HEIGHT;
+      gen.seedHeight(h);
       status.genHeight = +gen.heightCmd().toFixed(2);
     },
     perturb(magnitude = 3.0) {

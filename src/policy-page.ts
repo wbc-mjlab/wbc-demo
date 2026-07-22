@@ -155,7 +155,7 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
             <h3 class="live__keys-heading" id="lv-keys-general">General</h3>
             <table class="live__keys-table">
               <tbody>
-                <tr><th scope="row"><kbd>Space</kbd></th><td>Play / pause clip</td></tr>
+                <tr><th scope="row"><kbd>Space</kbd></th><td>Play / pause clip (crouch in Gen)</td></tr>
                 <tr><th scope="row"><kbd>R</kbd></th><td>Reset sim pose</td></tr>
                 <tr><th scope="row"><kbd>F</kbd></th><td>Toggle camera follow</td></tr>
                 <tr><th scope="row"><kbd>V</kbd></th><td>Toggle chase cam</td></tr>
@@ -190,9 +190,8 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
                 <tr><th scope="row"><kbd>W</kbd> <kbd>S</kbd></th><td>Forward / back</td></tr>
                 <tr><th scope="row"><kbd>Q</kbd> <kbd>E</kbd></th><td>Strafe left / right</td></tr>
                 <tr><th scope="row"><kbd>A</kbd> <kbd>D</kbd></th><td>Yaw left / right</td></tr>
-                <tr><th scope="row"><kbd>Shift</kbd></th><td>Velocity boost</td></tr>
-                <tr><th scope="row"><kbd>↑</kbd> <kbd>↓</kbd></th><td>Height up / down</td></tr>
-                <tr><th scope="row"><kbd>H</kbd></th><td>Reset height (0.80 m)</td></tr>
+                <tr><th scope="row"><kbd>Shift</kbd></th><td>Sprint (lower torso + faster)</td></tr>
+                <tr><th scope="row"><kbd>Space</kbd></th><td>Crouch (lower torso + slower)</td></tr>
               </tbody>
             </table>
           </section>
@@ -356,14 +355,21 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
 
       const syncTeleopFromKeys = (keys: Set<string>): void => {
         if (refSource !== 'gen') {
-          h.setGenTeleop({ forward: 0, strafe: 0, yaw: 0, boost: 0 });
+          h.setGenTeleop({
+            forward: 0,
+            strafe: 0,
+            yaw: 0,
+            sprint: false,
+            crouch: false,
+          });
           return;
         }
         const forward = (keys.has('KeyW') ? 1 : 0) + (keys.has('KeyS') ? -1 : 0);
         const strafe = (keys.has('KeyQ') ? 1 : 0) + (keys.has('KeyE') ? -1 : 0);
         const yaw = (keys.has('KeyA') ? 1 : 0) + (keys.has('KeyD') ? -1 : 0);
-        const boost = keys.has('ShiftLeft') || keys.has('ShiftRight') ? 1 : 0;
-        h.setGenTeleop({ forward, strafe, yaw, boost });
+        const sprint = keys.has('ShiftLeft') || keys.has('ShiftRight');
+        const crouch = keys.has('Space');
+        h.setGenTeleop({ forward, strafe, yaw, sprint, crouch });
       };
 
       const heldKeys = new Set<string>();
@@ -423,7 +429,11 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
         if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
 
         // Continuous Gen teleop (allow repeats for held keys via Set).
-        if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'ShiftLeft', 'ShiftRight'].includes(e.code)) {
+        const teleopCodes = [
+          'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE',
+          'ShiftLeft', 'ShiftRight', 'Space',
+        ];
+        if (teleopCodes.includes(e.code) && (e.code !== 'Space' || refSource === 'gen')) {
           heldKeys.add(e.code);
           syncTeleopFromKeys(heldKeys);
           if (refSource === 'gen') e.preventDefault();
@@ -439,7 +449,6 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
             break;
           case 'Space':
             e.preventDefault();
-            if (refSource === 'gen') break;
             playing = h.toggle();
             playEl.innerHTML = playing ? '⏸&nbsp;pause' : '▶&nbsp;play';
             renderState();
@@ -454,13 +463,11 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
             break;
           case 'ArrowUp':
             e.preventDefault();
-            if (refSource === 'gen') h.nudgeGenHeight(0.05);
-            else if (!getupEl.disabled) void h.triggerGetup();
+            if (refSource !== 'gen' && !getupEl.disabled) void h.triggerGetup();
             break;
           case 'ArrowDown':
             e.preventDefault();
-            if (refSource === 'gen') h.nudgeGenHeight(-0.05);
-            else if (!liedownEl.disabled) void h.triggerLiedown();
+            if (refSource !== 'gen' && !liedownEl.disabled) void h.triggerLiedown();
             break;
           case 'KeyG':
             e.preventDefault();
@@ -471,10 +478,6 @@ function buildUi(root: HTMLElement, policyName: string, repoUrl: string) {
               syncGenButton();
               renderState();
             });
-            break;
-          case 'KeyH':
-            e.preventDefault();
-            if (refSource === 'gen') h.resetGenHeight();
             break;
           case 'KeyF':
             e.preventDefault();
