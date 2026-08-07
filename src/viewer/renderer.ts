@@ -145,7 +145,7 @@ export class Viewer {
     );
     this.renderer.setSize(w, h);
     this.renderer.toneMapping = ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.85;
+    this.renderer.toneMappingExposure = 0.95;
     if (this.shadowsEnabled) {
       this.renderer.shadowMap.enabled = true;
       this.renderer.shadowMap.type = PCFSoftShadowMap;
@@ -178,23 +178,23 @@ export class Viewer {
     };
   }
 
-  /** Subtle IBL — just enough ambient reflection without a studio look. */
+  /** Soft IBL — blurred room bounce, low intensity for natural matte surfaces. */
   private addEnvironment(): void {
     const pmrem = new PMREMGenerator(this.renderer);
-    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.scene.environmentIntensity = 0.08;
+    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.1).texture;
+    this.scene.environmentIntensity = 0.1;
     pmrem.dispose();
   }
 
-  /** Soft overcast-daylight: sky dome + warm sun + faint bounce fill. */
+  /** Soft natural daylight: sky dome + gentle sun + generous bounce fill. */
   private addLights(): void {
-    // Sky/ground bounce — cool sky, warm floor reflection.
-    this.scene.add(new HemisphereLight(0xb8cce8, 0x3a3530, 0.32));
-    // Lift deep shadows slightly without flattening the scene.
-    this.scene.add(new AmbientLight(0x8899aa, 0.06));
+    // Broad sky/ground bounce — softens contrast like overcast / late-morning light.
+    this.scene.add(new HemisphereLight(0xc5d6ea, 0x4a4540, 0.48));
+    // Lift deep shadow wells without flattening form.
+    this.scene.add(new AmbientLight(0x9aabbb, 0.12));
 
-    const sun = new DirectionalLight(0xfff2e6, 0.82);
-    sun.position.set(5, 9, 4);
+    const sun = new DirectionalLight(0xfff1e4, 0.55);
+    sun.position.set(4, 11, 5);
     if (this.shadowsEnabled) {
       sun.castShadow = true;
       sun.shadow.mapSize.set(1024, 1024);
@@ -206,15 +206,19 @@ export class Viewer {
       sun.shadow.camera.top = extent;
       sun.shadow.camera.bottom = -extent;
       sun.shadow.bias = -0.0002;
-      sun.shadow.normalBias = 0.025;
-      sun.shadow.radius = 2.5;
+      sun.shadow.normalBias = 0.03;
+      sun.shadow.radius = 5.5;
     }
     this.scene.add(sun);
 
-    // Opposite-side sky fill — keeps the shadow side readable, not studio-flat.
-    const fill = new DirectionalLight(0xc8daf0, 0.14);
-    fill.position.set(-5, 4, -3);
+    // Cool sky fill + warm ground bounce — softens the lit/shadow edge.
+    const fill = new DirectionalLight(0xd0e0f2, 0.28);
+    fill.position.set(-5, 5, -3);
     this.scene.add(fill);
+
+    const bounce = new DirectionalLight(0xe8dcc8, 0.1);
+    bounce.position.set(1, 1.5, -4);
+    this.scene.add(bounce);
   }
 
   private addGround(receiveShadow: boolean): void {
@@ -237,9 +241,9 @@ export class Viewer {
       new MeshStandardMaterial({
         map: tex,
         color: new Color(0xffffff),
-        roughness: 0.92,
+        roughness: 0.96,
         metalness: 0,
-        envMapIntensity: 0.03,
+        envMapIntensity: 0.02,
       }),
     );
     floor.rotation.x = -Math.PI / 2;

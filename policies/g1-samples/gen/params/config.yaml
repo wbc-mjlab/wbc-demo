@@ -53,25 +53,27 @@ state:
       scale: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
         1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 command:
-  packing: xy_then_height_then_angle
+  packing: xy_then_height_setpoint_then_angle
   horizons: [15, 30, 60]
   position_scale: 3.6
+  height_scale: 1.0
   xy_features_per_horizon: 2
-  height_features_per_horizon: 1
+  height_features_per_horizon: 0
+  height_setpoint_dim: 1
   angle_features_per_horizon: 2
-  term_names: [cmd_xy_waypoints, cmd_height_waypoints, cmd_angle_waypoints]
-  height_lowpass_tau: 0.1
+  term_names: [cmd_xy_waypoints, cmd_height_setpoint, cmd_angle_waypoints]
+  height_lowpass_tau: 0.0
 outputs:
   field_order: [ref_base_height, ref_base_lin_vel_b, ref_base_ang_vel_b, ref_gravity_b,
     ref_joint_pos]
   field_dims: {ref_base_height: 1, ref_base_lin_vel_b: 3, ref_base_ang_vel_b: 3, ref_gravity_b: 3,
     ref_joint_pos: 29}
   layout: arc_reference
-dims: {input_dim: 655, state_dim: 640, command_dim: 15, output_dim: 39}
+dims: {input_dim: 653, state_dim: 640, command_dim: 13, output_dim: 39}
 model: {type: flow_ae, onnx_file: generator.onnx, onnx_input_name: obs, onnx_output_name: reference,
   n_euler_steps: 4, latent_dim: 256}
 play_vel_ranges:
   lin_vel_x: [-1.5, 4.0]
   lin_vel_y: [-2.0, 2.0]
-  ang_vel_z: [-4.0, 4.0]
-  height: [0.75, 0.85]
+  ang_vel_z: [-3.0, 3.0]
+  height: [0.45, 0.85]
