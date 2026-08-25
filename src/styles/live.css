@@ -641,6 +641,77 @@
   bottom: 1rem;
 }
 
+/* Mode toggle while full HUD is hidden (H) — top left */
+.live__mode-mini {
+  display: none;
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 4;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.45rem 0.75rem;
+  background: var(--hud-bg);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  backdrop-filter: blur(14px) saturate(1.2);
+}
+.live[data-hud="off"] .live__mode-mini {
+  display: inline-flex;
+}
+
+/* Compact clip strip when full HUD is hidden (H) */
+.live__minibar {
+  display: none;
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 4;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.45rem;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--hud-bg);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  backdrop-filter: blur(14px) saturate(1.2);
+  max-width: calc(100vw - 1.5rem);
+}
+.live[data-hud="off"][data-ref="clips"] .live__minibar {
+  display: flex;
+}
+.live[data-hud="off"][data-ref="gen"] .live__minibar,
+.live__minibar[hidden] {
+  display: none !important;
+}
+.live__minibar-label {
+  display: none;
+}
+.live__minibar-clip {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.live__minibar-clip select {
+  max-width: min(12rem, 42vw);
+  font-size: 0.78rem;
+  padding: 0.35rem 0.5rem;
+}
+.live__btn--icon {
+  width: 2.15rem;
+  height: 2.15rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+.live__btn--icon[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
+  color: var(--color-accent);
+}
+
 /* ---- Responsive: stack the bar on narrow screens ------------------------- */
 @media (max-width: 720px) {
   .live__topbar {

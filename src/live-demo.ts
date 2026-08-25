@@ -321,6 +321,18 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
         </div>
       </div>
 
+      ${tracking ? '' : '<button type="button" id="lv-mode-mini" class="live__mode-mini live__btn live__btn--mode" title="Switch mode (G)" aria-pressed="false" disabled>generator</button>'}
+
+      <div class="live__minibar" id="lv-minibar" aria-label="Compact clip controls">
+        <label class="live__select live__select--clip live__minibar-clip">
+          <span class="live__minibar-label">trajectory</span>
+          <select id="lv-clip-mini"></select>
+        </label>
+        <button type="button" id="lv-mini-play" class="live__btn live__btn--icon" title="Play">▶</button>
+        <button type="button" id="lv-mini-pause" class="live__btn live__btn--icon" title="Pause">⏸</button>
+        <button type="button" id="lv-mini-loop" class="live__btn live__btn--icon" title="Loop" aria-pressed="false">↻</button>
+      </div>
+
       <footer class="live__telemetry" id="lv-metrics"></footer>
       <div class="live__progress" aria-hidden="true"><span id="lv-progress"></span></div>
     </div>`;
@@ -333,11 +345,17 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
   const metricsEl = $('#lv-metrics');
   const progressEl = $('#lv-progress');
   const clipEl = $<HTMLSelectElement>('#lv-clip');
+  const clipMiniEl = $<HTMLSelectElement>('#lv-clip-mini');
+  const miniBarEl = $<HTMLElement>('#lv-minibar');
+  const miniPlayEl = $<HTMLButtonElement>('#lv-mini-play');
+  const miniPauseEl = $<HTMLButtonElement>('#lv-mini-pause');
+  const miniLoopEl = $<HTMLButtonElement>('#lv-mini-loop');
   const prevEl = $<HTMLButtonElement>('#lv-prev');
   const nextEl = $<HTMLButtonElement>('#lv-next');
   const getupEl = $<HTMLButtonElement>('#lv-getup');
   const liedownEl = $<HTMLButtonElement>('#lv-liedown');
   const genEl = tracking ? null : $<HTMLButtonElement>('#lv-mode-toggle');
+  const genMiniEl = tracking ? null : $<HTMLButtonElement>('#lv-mode-mini');
   const speedEl = $<HTMLSelectElement>('#lv-speed');
   const modeEl = $<HTMLButtonElement>('#lv-mode');
   const pushEl = $<HTMLButtonElement>('#lv-push');
@@ -482,26 +500,57 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
     if (!genEl) {
       syncKeysHelp();
       syncPadVisibility();
+      syncMiniTransport();
       return;
     }
-    const avail = latest?.genAvailable === true;
+    // Prefer live status; before the first onStatus tick use a soft enable so
+    // the toggle isn't stuck disabled while Gen is still booting.
+    const avail = latest == null ? true : latest.genAvailable === true;
     const down = latest != null && !latest.robotIsUp;
-    genEl.disabled = !avail || (down && refSource !== 'gen');
-    genEl.setAttribute('aria-pressed', String(refSource === 'gen'));
-    genEl.classList.toggle('live__btn--warn', refSource === 'gen');
-    // Label is the mode you switch *to*.
-    genEl.textContent = refSource === 'gen' ? 'tracking' : 'generator';
-    genEl.title = refSource === 'gen'
+    const disabled = !avail || (down && refSource !== 'gen');
+    const genOn = refSource === 'gen';
+    const label = genOn ? 'tracking' : 'generator';
+    const title = genOn
       ? 'Switch to tracking / clips (G)'
       : 'Switch to generator locomotion (G)';
+    for (const btn of [genEl, genMiniEl]) {
+      if (!btn) continue;
+      btn.disabled = disabled;
+      btn.setAttribute('aria-pressed', String(genOn));
+      btn.classList.toggle('live__btn--warn', genOn);
+      btn.textContent = label;
+      btn.title = title;
+    }
 
-    const genOn = refSource === 'gen';
     if (genBadgeEl) {
       genBadgeEl.textContent = !avail ? 'n/a' : genOn ? 'on' : 'off';
       genBadgeEl.dataset.tone = !avail ? 'muted' : genOn ? 'on' : 'off';
     }
     syncKeysHelp();
     syncPadVisibility();
+    syncMiniTransport();
+  }
+
+  function syncMiniTransport(): void {
+    const genOn = refSource === 'gen';
+    rootEl.dataset.ref = genOn ? 'gen' : 'clips';
+    const showMini = !genOn;
+    miniBarEl.hidden = !showMini;
+    miniBarEl.setAttribute('aria-hidden', String(!showMini));
+    miniPlayEl.disabled = playing;
+    miniPauseEl.disabled = !playing;
+    miniPlayEl.setAttribute('aria-pressed', String(playing));
+    miniPauseEl.setAttribute('aria-pressed', String(!playing));
+    miniLoopEl.setAttribute('aria-pressed', loopEl.getAttribute('aria-pressed') ?? 'false');
+    clipMiniEl.disabled = clipEl.disabled;
+  }
+
+  function fillClipSelects(clips: ReferenceClip[], current?: string | null): void {
+    const html = clips
+      .map((c) => `<option value="${c.id}"${c.id === current ? ' selected' : ''}>${escapeHtml(c.name)}</option>`)
+      .join('');
+    clipEl.innerHTML = html;
+    clipMiniEl.innerHTML = html;
   }
 
   let hudVisible = true;
@@ -540,19 +589,18 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
       if (err) { rootEl.dataset.state = 'fell'; stateEl.textContent = 'error'; }
     },
     populateClips(clips: ReferenceClip[]) {
-      const current = latest?.clipId;
-      clipEl.innerHTML = clips
-        .map((c) => `<option value="${c.id}"${c.id === current ? ' selected' : ''}>${escapeHtml(c.name)}</option>`)
-        .join('');
+      fillClipSelects(clips, latest?.clipId);
     },
     updateFsm(s: LiveStatus) {
       refSource = s.refSource;
       clipEl.disabled = !s.canBrowse;
+      clipMiniEl.disabled = !s.canBrowse;
       prevEl.disabled = !s.canBrowse;
       nextEl.disabled = !s.canBrowse;
       getupEl.disabled = !s.canGetup;
       liedownEl.disabled = !s.canLiedown;
       syncGenButton();
+      syncMiniTransport();
     },
     updateMetrics(s: LiveStatus) {
       latest = s;
@@ -563,6 +611,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
       loopEl.setAttribute('aria-pressed', String(s.loop));
       renderState();
       this.updateFsm(s);
+      syncMiniTransport();
       const metrics = [
         tm('fsm', s.fsmLabel),
         tm('ref', s.refSource),
@@ -596,10 +645,13 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
         progressEl.style.width = '100%';
       }
       if (clipEl.value !== s.clipId && s.clipId) clipEl.value = s.clipId;
+      if (clipMiniEl.value !== s.clipId && s.clipId) clipMiniEl.value = s.clipId;
     },
     wire(h: LiveEngineHandle) {
       let following = true;
       let chasing = false;
+      latest = h.status;
+      refSource = h.status.refSource;
 
       const syncModeButton = (): void => {
         modeEl.textContent = mode;
@@ -649,12 +701,16 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
       };
       notifyTeleop = syncTeleop;
 
-      clipEl.addEventListener('change', () => void h.selectClip(clipEl.value));
+      const selectClip = (id: string): void => {
+        void h.selectClip(id);
+      };
+      clipEl.addEventListener('change', () => selectClip(clipEl.value));
+      clipMiniEl.addEventListener('change', () => selectClip(clipMiniEl.value));
       prevEl.addEventListener('click', () => void h.browsePrevClip());
       nextEl.addEventListener('click', () => void h.browseNextClip());
       getupEl.addEventListener('click', () => void h.triggerGetup());
       liedownEl.addEventListener('click', () => void h.triggerLiedown());
-      genEl?.addEventListener('click', () => {
+      const onToggleGen = (): void => {
         void h.toggleGen().then((on) => {
           refSource = on ? 'gen' : 'clips';
           heldKeys.clear();
@@ -662,7 +718,9 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
           syncGenButton();
           renderState();
         });
-      });
+      };
+      genEl?.addEventListener('click', onToggleGen);
+      genMiniEl?.addEventListener('click', onToggleGen);
       speedEl.addEventListener('change', () => h.setSpeed(parseFloat(speedEl.value)));
       modeEl.addEventListener('click', () => {
         mode = mode === 'policy' ? 'open-loop' : 'policy';
@@ -681,23 +739,50 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
         if (chasing) following = true;
         syncChaseButton();
       });
-      loopEl.addEventListener('click', () => {
-        const on = loopEl.getAttribute('aria-pressed') !== 'true';
+      const setLoopUi = (on: boolean): void => {
         h.setLoop(on);
         loopEl.setAttribute('aria-pressed', String(on));
+        miniLoopEl.setAttribute('aria-pressed', String(on));
+      };
+      loopEl.addEventListener('click', () => {
+        setLoopUi(loopEl.getAttribute('aria-pressed') !== 'true');
       });
       resetEl.addEventListener('click', () => h.reset());
+      const syncPlayUi = (): void => {
+        playEl.innerHTML = playing ? '⏸&nbsp;pause' : '▶&nbsp;play';
+        syncMiniTransport();
+        renderState();
+      };
       playEl.addEventListener('click', () => {
         if (refSource === 'gen') return;
         playing = h.toggle();
-        playEl.innerHTML = playing ? '⏸&nbsp;pause' : '▶&nbsp;play';
-        renderState();
+        syncPlayUi();
+      });
+      miniPlayEl.addEventListener('click', () => {
+        if (refSource === 'gen') return;
+        if (!playing) {
+          h.play();
+          playing = true;
+          syncPlayUi();
+        }
+      });
+      miniPauseEl.addEventListener('click', () => {
+        if (refSource === 'gen') return;
+        if (playing) {
+          h.pause();
+          playing = false;
+          syncPlayUi();
+        }
+      });
+      miniLoopEl.addEventListener('click', () => {
+        if (refSource === 'gen') return;
+        setLoopUi(miniLoopEl.getAttribute('aria-pressed') !== 'true');
       });
 
       syncFollowButton();
       syncChaseButton();
-      refSource = h.status.refSource;
       syncGenButton();
+      syncMiniTransport();
       renderState();
       syncPadVisibility();
 
@@ -742,8 +827,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
             e.preventDefault();
             if (refSource === 'gen') break;
             playing = h.toggle();
-            playEl.innerHTML = playing ? '⏸&nbsp;pause' : '▶&nbsp;play';
-            renderState();
+            syncPlayUi();
             break;
           case 'ArrowLeft':
             e.preventDefault();
@@ -777,6 +861,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
               heldKeys.clear();
               syncTeleop();
               syncGenButton();
+              syncMiniTransport();
               renderState();
             });
             break;
