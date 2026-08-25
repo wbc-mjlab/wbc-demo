@@ -21,8 +21,10 @@ static site to **GitHub Pages**.
   `wbc_reference_node` Gen mode (`policies/<id>/gen/params/`).
 - **Tracking page** (`/tracking.html`) — shareable **reference / clip tracking**
   only (Generator off). Same query params: `?id=<policy>&clip=<clip>`.
-  Force HUD with `?chrome=minimal` or `?chrome=full`. Toggle the on-screen
+  Force HUD chrome with `?chrome=minimal` or `?chrome=full`. Toggle the on-screen
   stick with the **pad** button (or `?pad=on` / `?pad=off`; preference is saved).
+  On phones/tablets the demo starts in **tracking** with the HUD **hidden**
+  (`H` to show); override with `?mode=gen|tracking` and `?hud=on|off`.
   The controls help panel switches with Gen vs tracking mode.
 - **Deploy-aligned clip UX** — browsable clips come from
   `policies/<id>/reference/manifest.yaml` (same idea as

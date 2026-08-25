@@ -111,6 +111,9 @@ export function bootDemoPage(opts: DemoPageOptions): void {
   const startClip = params.get('clip') ?? undefined;
   const chromeParam = params.get('chrome');
   const padParam = params.get('pad');
+  const hudParam = params.get('hud');
+  const modeParam = params.get('mode') ?? params.get('gen');
+  const mobile = preferMinimalChrome();
   const entry = id ? getPolicy(id) : undefined;
   if (!entry) {
     renderMessage(root, 'Policy not found',
@@ -145,6 +148,28 @@ export function bootDemoPage(opts: DemoPageOptions): void {
     padParam === 'on' ? true
       : padParam === 'off' ? false
         : preferMobilePad();
+  // Mobile defaults: tracking + HUD hidden. Override with ?hud=on|off and
+  // ?mode=gen|tracking (or ?gen=1|0).
+  const startHudVisible =
+    hudParam === 'off' ? false
+      : hudParam === 'on' ? true
+        : !mobile;
+  let startInGen: boolean | undefined;
+  if (tracking) {
+    startInGen = false;
+  } else if (
+    modeParam === '0' || modeParam === 'off' || modeParam === 'false'
+    || modeParam === 'tracking' || modeParam === 'clips'
+  ) {
+    startInGen = false;
+  } else if (
+    modeParam === '1' || modeParam === 'on' || modeParam === 'true'
+    || modeParam === 'gen' || modeParam === 'generator'
+  ) {
+    startInGen = true;
+  } else {
+    startInGen = mobile ? false : undefined;
+  }
 
   root.classList.remove('page');
   const ui = buildUi(root, {
@@ -153,6 +178,7 @@ export function bootDemoPage(opts: DemoPageOptions): void {
     kind: opts.kind,
     chrome,
     padEnabled,
+    startHudVisible,
     onChromeChange: (next) => { chrome = next; },
   });
 
@@ -170,8 +196,7 @@ export function bootDemoPage(opts: DemoPageOptions): void {
     autoplay: true,
     follow: true,
     interactiveDrag: true,
-    // Tracking page always opens in clip reference mode.
-    startInGen: tracking ? false : undefined,
+    startInGen,
     onMessage: (m) => ui.setStatus(m),
     onReady: (clips) => ui.populateClips(clips),
     onStatus: (s) => ui.updateMetrics(s),
@@ -193,6 +218,7 @@ interface BuildUiOpts {
   kind: DemoPageKind;
   chrome: 'full' | 'minimal';
   padEnabled: boolean;
+  startHudVisible: boolean;
   onChromeChange: (chrome: 'full' | 'minimal') => void;
 }
 
@@ -204,7 +230,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
     : `<button type="button" id="lv-mode-toggle" class="live__btn live__btn--mode" title="Switch mode (G)" aria-pressed="false" disabled>generator</button>`;
 
   root.innerHTML = `
-    <div class="live" id="lv-root" data-state="boot" data-chrome="${opts.chrome}" data-kind="${opts.kind}" data-hud="on">
+    <div class="live" id="lv-root" data-state="boot" data-chrome="${opts.chrome}" data-kind="${opts.kind}" data-hud="${opts.startHudVisible ? 'on' : 'off'}">
       <div class="live__stage" id="lv-viewport"></div>
       <div class="live__vignette" aria-hidden="true"></div>
 
@@ -553,7 +579,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
     clipMiniEl.innerHTML = html;
   }
 
-  let hudVisible = true;
+  let hudVisible = opts.startHudVisible;
   function setHudVisible(on: boolean): void {
     hudVisible = on;
     rootEl.dataset.hud = on ? 'on' : 'off';
@@ -562,6 +588,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
       moreEl.open = false;
     }
   }
+  if (!opts.startHudVisible) setHudVisible(false);
 
   chromeEl.textContent = chrome === 'minimal' ? 'full UI' : 'compact';
   chromeEl.setAttribute('aria-pressed', String(chrome === 'minimal'));
