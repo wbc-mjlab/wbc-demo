@@ -24,6 +24,93 @@
   --glow: color-mix(in srgb, var(--color-accent) 55%, transparent);
 }
 
+/* ---- Boot / loading splash ---------------------------------------------- */
+.live__boot {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background:
+    radial-gradient(
+      120% 90% at 50% 40%,
+      color-mix(in srgb, var(--color-bg) 35%, transparent) 0%,
+      color-mix(in srgb, var(--color-bg) 92%, transparent) 70%
+    ),
+    var(--color-viewport-bg);
+  transition: opacity 380ms ease, visibility 380ms ease;
+}
+.live[data-loading="done"] .live__boot {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.live[data-loading="error"] .live__boot {
+  /* stay visible on failure */
+}
+.live__boot[hidden] {
+  display: none !important;
+}
+.live__boot-card {
+  width: min(22rem, 100%);
+  padding: 1.25rem 1.2rem 1.1rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--hud-bg);
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
+  backdrop-filter: blur(18px) saturate(1.25);
+  text-align: center;
+}
+.live__boot-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.85rem;
+}
+.live__boot-title {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+}
+.live__boot-label {
+  margin: 0 0 0.85rem;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--color-text-muted);
+  min-height: 2.4em;
+}
+.live__boot-label[data-tone="error"] {
+  color: var(--color-danger);
+}
+.live__boot-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--hairline);
+  overflow: hidden;
+}
+.live__boot-fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: var(--color-accent);
+  box-shadow: 0 0 10px var(--glow);
+  transition: width 220ms ease;
+}
+.live__boot-pct {
+  margin: 0.55rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  color: var(--color-text-muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .live__boot { transition: none; }
+  .live__boot-fill { transition: none; }
+}
+
 /* Full-bleed three.js canvas host (renderer appends its <canvas> here). */
 .live__stage {
   position: absolute;

@@ -230,9 +230,23 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
     : `<button type="button" id="lv-mode-toggle" class="live__btn live__btn--mode" title="Switch mode (G)" aria-pressed="false" disabled>generator</button>`;
 
   root.innerHTML = `
-    <div class="live" id="lv-root" data-state="boot" data-chrome="${opts.chrome}" data-kind="${opts.kind}" data-hud="${opts.startHudVisible ? 'on' : 'off'}">
+    <div class="live" id="lv-root" data-state="boot" data-chrome="${opts.chrome}" data-kind="${opts.kind}" data-hud="${opts.startHudVisible ? 'on' : 'off'}" data-loading="true">
       <div class="live__stage" id="lv-viewport"></div>
       <div class="live__vignette" aria-hidden="true"></div>
+
+      <div class="live__boot" id="lv-boot" role="status" aria-live="polite" aria-busy="true">
+        <div class="live__boot-card">
+          <div class="live__boot-brand">
+            <span class="live__dot" aria-hidden="true"></span>
+            <span class="live__boot-title">${escapeHtml(opts.policyName)}</span>
+          </div>
+          <p class="live__boot-label" id="lv-boot-label">Loading…</p>
+          <div class="live__boot-bar" aria-hidden="true">
+            <span class="live__boot-fill" id="lv-boot-fill"></span>
+          </div>
+          <p class="live__boot-pct" id="lv-boot-pct">0%</p>
+        </div>
+      </div>
 
       <header class="live__topbar">
         <a class="live__back" href="${galleryHref()}" title="All clips" aria-label="All clips">←</a>
@@ -378,6 +392,10 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
   const $ = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel)!;
   const rootEl = $('#lv-root');
   const viewport = $<HTMLElement>('#lv-viewport');
+  const bootEl = $<HTMLElement>('#lv-boot');
+  const bootLabelEl = $<HTMLElement>('#lv-boot-label');
+  const bootFillEl = $<HTMLElement>('#lv-boot-fill');
+  const bootPctEl = $<HTMLElement>('#lv-boot-pct');
   const statusEl = $('#lv-status');
   const stateEl = $('#lv-state');
   const metricsEl = $('#lv-metrics');
@@ -439,6 +457,62 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
     if (next !== 'minimal') moreEl.open = false;
   }
   placeDenseControls(opts.chrome);
+
+  let bootProgress = 0;
+  let bootDone = false;
+
+  function setBootProgress(pct: number, label?: string): void {
+    if (bootDone) return;
+    bootProgress = Math.max(bootProgress, Math.min(100, Math.round(pct)));
+    bootFillEl.style.width = `${bootProgress}%`;
+    bootPctEl.textContent = `${bootProgress}%`;
+    if (label) bootLabelEl.textContent = label;
+  }
+
+  function noteBootMessage(msg: string): void {
+    if (bootDone) return;
+    const mesh = /^Fetching meshes (\d+)\/(\d+)/i.exec(msg);
+    if (mesh) {
+      const n = Number(mesh[1]);
+      const total = Math.max(1, Number(mesh[2]));
+      setBootProgress(28 + (n / total) * 42, msg);
+      return;
+    }
+    const steps: Array<{ re: RegExp; pct: number }> = [
+      { re: /Loading config/i, pct: 8 },
+      { re: /No reference\/manifest/i, pct: 12 },
+      { re: /Loading MuJoCo|Loading.*policy/i, pct: 22 },
+      { re: /Loading generator/i, pct: 78 },
+      { re: /Generator ready|Generator unavailable/i, pct: 92 },
+      { re: /Loading clip/i, pct: 96 },
+      { re: /Tracking/i, pct: 98 },
+    ];
+    for (const step of steps) {
+      if (step.re.test(msg)) {
+        setBootProgress(step.pct, msg);
+        return;
+      }
+    }
+    setBootProgress(bootProgress, msg);
+  }
+
+  function finishBoot(err = false): void {
+    if (bootDone) return;
+    bootDone = true;
+    if (err) {
+      rootEl.dataset.loading = 'error';
+      bootEl.setAttribute('aria-busy', 'false');
+      return;
+    }
+    setBootProgress(100, 'Ready');
+    rootEl.dataset.loading = 'done';
+    bootEl.setAttribute('aria-busy', 'false');
+    window.setTimeout(() => {
+      bootEl.hidden = true;
+    }, 420);
+  }
+
+  setBootProgress(3, 'Starting…');
 
   let latest: LiveStatus | undefined;
   let playing = true;
@@ -625,7 +699,15 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
     setStatus(s: string, err = false) {
       statusEl.textContent = s;
       statusEl.style.color = err ? 'var(--color-danger)' : '';
-      if (err) { rootEl.dataset.state = 'fell'; stateEl.textContent = 'error'; }
+      if (err) {
+        rootEl.dataset.state = 'fell';
+        stateEl.textContent = 'error';
+        bootLabelEl.textContent = s;
+        bootLabelEl.dataset.tone = 'error';
+        finishBoot(true);
+        return;
+      }
+      noteBootMessage(s);
     },
     populateClips(clips: ReferenceClip[]) {
       fillClipSelects(clips, latest?.clipId);
@@ -691,6 +773,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
       let chasing = false;
       latest = h.status;
       refSource = h.status.refSource;
+      finishBoot(false);
 
       const syncModeButton = (): void => {
         modeEl.textContent = mode;
