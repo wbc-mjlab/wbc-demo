@@ -109,7 +109,7 @@
           "$ref": "#/$defs/relPath"
         },
         "gen": {
-          "description": "Optional Gen params folder (wbc_gen_deploy_params_v1), e.g. \"gen/params/\". Enables Generator locomotion mode alongside clip tracking.",
+          "description": "Optional Gen params folder (wbc_gen_deploy_params_v2), e.g. \"gen/params/\". Enables Generator locomotion mode alongside clip tracking.",
           "$ref": "#/$defs/relPath"
         },
         "clips": {

@@ -1,5 +1,5 @@
 /**
- * Load wbc_gen_deploy_params_v1 (deploy config/policy/gen/<overlay>/params/config.yaml).
+ * Load Gen deploy params (``wbc_gen_deploy_params_v2``).
  */
 
 import { load as yamlLoad } from 'js-yaml';
@@ -13,16 +13,38 @@ export interface GenStateTermCfg {
   scale: number[];
 }
 
+export interface GenCommandTermCfg {
+  deployName: string;
+  trainingName: string;
+  dim: number;
+  historyLength: number;
+  flatWidth: number;
+  scale: number[];
+  horizons?: number[];
+  positionScale?: number;
+  heightScale?: number;
+  heightLowpassTau?: number;
+  heightSetpointDim?: number;
+  featuresPerHorizon?: number;
+  styleNames?: string[];
+  styleHeightRanges?: Record<string, [number, number]>;
+}
+
 export interface GenCommandCfg {
-  packing: string;
+  termNames: string[];
+  observations: Record<string, GenCommandTermCfg>;
   horizons: number[];
   positionScale: number;
-  xyFeaturesPerHorizon: number;
-  heightFeaturesPerHorizon: number;
-  heightSetpointDim: number;
-  angleFeaturesPerHorizon: number;
-  heightLowpassTau: number;
   heightScale: number;
+  heightLowpassTau: number;
+  /** Derived convenience for teleop (0 = no setpoint term). */
+  heightSetpointDim: number;
+  /** Derived convenience for teleop (0 = no per-horizon height). */
+  heightFeaturesPerHorizon: number;
+  /** Style one-hot dim (0 = no ``cmd_style``). */
+  styleDim: number;
+  styleNames: string[];
+  styleHeightRanges: Record<string, [number, number]>;
 }
 
 export interface GenModelCfg {
@@ -70,6 +92,92 @@ function asNumberList(raw: unknown): number[] {
   return raw.map((v) => Number(v));
 }
 
+function parseCommandTerm(
+  name: string,
+  term: Record<string, unknown>,
+): GenCommandTermCfg {
+  const dim = Number(term.dim);
+  const hist = Number(term.history_length ?? 0);
+  const cfg: GenCommandTermCfg = {
+    deployName: String(term.deploy_name ?? name),
+    trainingName: String(term.training_name ?? name),
+    dim,
+    historyLength: hist,
+    flatWidth: Number(term.flat_width ?? dim),
+    scale: asFloatList(term.scale, dim),
+  };
+  if (term.horizons != null) cfg.horizons = asNumberList(term.horizons);
+  if (term.position_scale != null) cfg.positionScale = Number(term.position_scale);
+  if (term.height_scale != null) cfg.heightScale = Number(term.height_scale);
+  if (term.height_lowpass_tau != null) {
+    cfg.heightLowpassTau = Number(term.height_lowpass_tau);
+  }
+  if (term.height_setpoint_dim != null) {
+    cfg.heightSetpointDim = Number(term.height_setpoint_dim);
+  }
+  if (term.features_per_horizon != null) {
+    cfg.featuresPerHorizon = Number(term.features_per_horizon);
+  }
+  if (Array.isArray(term.style_names)) {
+    cfg.styleNames = asStringList(term.style_names);
+  }
+  if (term.style_height_ranges && typeof term.style_height_ranges === 'object') {
+    const ranges: Record<string, [number, number]> = {};
+    for (const [k, v] of Object.entries(
+      term.style_height_ranges as Record<string, unknown>,
+    )) {
+      if (!Array.isArray(v) || v.length < 2) continue;
+      ranges[k] = [Number(v[0]), Number(v[1])];
+    }
+    cfg.styleHeightRanges = ranges;
+  }
+  return cfg;
+}
+
+function parseModularCommand(cmd: Record<string, unknown>): GenCommandCfg {
+  const termNames = asStringList(cmd.term_names);
+  if (termNames.length === 0) {
+    throw new Error('Gen params command missing term_names');
+  }
+  const rawObs = (cmd.observations ?? {}) as Record<string, Record<string, unknown>>;
+  const observations: Record<string, GenCommandTermCfg> = {};
+  for (const name of termNames) {
+    const term = rawObs[name];
+    if (!term) throw new Error(`Gen params missing command.observations.${name}`);
+    observations[name] = parseCommandTerm(name, term);
+  }
+
+  const xy = observations['cmd_xy_waypoints'];
+  const hSet = observations['cmd_height_setpoint'];
+  const hWp = observations['cmd_height_waypoints'];
+  const style = observations['cmd_style'];
+  const horizons =
+    asNumberList(cmd.horizons).length > 0
+      ? asNumberList(cmd.horizons)
+      : (xy?.horizons ?? hWp?.horizons ?? []);
+
+  const defaultStyleNames = ['stand_walk', 'crouch', 'run', 'sit'];
+  const styleDim = style?.flatWidth ?? 0;
+  let styleNames = style?.styleNames ?? [];
+  if (styleNames.length === 0 && styleDim > 0) {
+    styleNames = defaultStyleNames.slice(0, styleDim);
+  }
+
+  return {
+    termNames,
+    observations,
+    horizons,
+    positionScale: xy?.positionScale ?? 1,
+    heightScale: hSet?.heightScale ?? hWp?.heightScale ?? 1,
+    heightLowpassTau: hWp?.heightLowpassTau ?? 0,
+    heightSetpointDim: hSet?.flatWidth ?? hSet?.heightSetpointDim ?? 0,
+    heightFeaturesPerHorizon: hWp != null ? (hWp.featuresPerHorizon ?? 1) : 0,
+    styleDim,
+    styleNames,
+    styleHeightRanges: style?.styleHeightRanges ?? {},
+  };
+}
+
 /** Fetch + parse params/config.yaml. paramsBaseUrl should end with a slash. */
 export async function loadGenDeployParams(paramsBaseUrl: string): Promise<GenDeployParams> {
   const base = paramsBaseUrl.endsWith('/') ? paramsBaseUrl : `${paramsBaseUrl}/`;
@@ -78,8 +186,8 @@ export async function loadGenDeployParams(paramsBaseUrl: string): Promise<GenDep
   const doc = yamlLoad(await res.text()) as Record<string, unknown>;
 
   const schemaVersion = String(doc.schema_version ?? '');
-  if (schemaVersion !== 'wbc_gen_deploy_params_v1') {
-    throw new Error(`Expected wbc_gen_deploy_params_v1, got '${schemaVersion}'`);
+  if (schemaVersion !== 'wbc_gen_deploy_params_v2') {
+    throw new Error(`Expected wbc_gen_deploy_params_v2, got '${schemaVersion}'`);
   }
 
   const state = doc.state as Record<string, unknown> | undefined;
@@ -106,9 +214,25 @@ export async function loadGenDeployParams(paramsBaseUrl: string): Promise<GenDep
 
   const cmd = doc.command as Record<string, unknown> | undefined;
   if (!cmd) throw new Error('Gen params missing command block');
+  if (cmd.observations == null) {
+    throw new Error('Gen params command missing observations (v2 modular layout required)');
+  }
 
   const dims = doc.dims as Record<string, unknown> | undefined;
   if (!dims) throw new Error('Gen params missing dims block');
+
+  const command = parseModularCommand(cmd);
+
+  let cmdSum = 0;
+  for (const name of command.termNames) {
+    cmdSum += command.observations[name]!.flatWidth;
+  }
+  const commandDim = Number(dims.command_dim);
+  if (cmdSum !== commandDim) {
+    throw new Error(
+      `Gen params command flat widths sum ${cmdSum} != command_dim ${commandDim}`,
+    );
+  }
 
   const modelRaw = (doc.model ?? {}) as Record<string, unknown>;
   const playRaw = (doc.play_vel_ranges ?? {}) as Record<string, unknown>;
@@ -129,20 +253,10 @@ export async function loadGenDeployParams(paramsBaseUrl: string): Promise<GenDep
     stateObservationNames: observationNames,
     stateObservations,
     historyLength,
-    command: {
-      packing: String(cmd.packing ?? 'xy_then_height_then_angle'),
-      horizons: asNumberList(cmd.horizons),
-      positionScale: Number(cmd.position_scale ?? 1),
-      xyFeaturesPerHorizon: Number(cmd.xy_features_per_horizon ?? 2),
-      heightFeaturesPerHorizon: Number(cmd.height_features_per_horizon ?? 0),
-      heightSetpointDim: Number(cmd.height_setpoint_dim ?? 0),
-      angleFeaturesPerHorizon: Number(cmd.angle_features_per_horizon ?? 2),
-      heightLowpassTau: Number(cmd.height_lowpass_tau ?? 0.1),
-      heightScale: Number(cmd.height_scale ?? 1),
-    },
+    command,
     inputDim: Number(dims.input_dim),
     stateDim: Number(dims.state_dim),
-    commandDim: Number(dims.command_dim),
+    commandDim,
     outputDim: Number(dims.output_dim ?? 39),
     model: {
       type: String(modelRaw.type ?? ''),

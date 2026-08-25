@@ -28,7 +28,7 @@ policies/
     thumb.png                  # gallery thumbnail (optional)
 ```
 
-Optional **Gen** mode: ship `gen/params/` (`wbc_gen_deploy_params_v1` + `generator.onnx`)
+Optional **Gen** mode: ship `gen/params/` (`wbc_gen_deploy_params_v2` + `generator.onnx`)
 and set `artifacts.gen: gen/params/` — the live page then toggles with **G** / **gen**.
 
 - `<policy-id>` is the folder name. It is the **authoritative** id and the URL

@@ -251,53 +251,63 @@
   color: var(--color-accent);
 }
 
-/* ---- Keyboard controls panel ------------------------------------------- */
+/* ---- Controls help dropdown (topbar) ------------------------------------ */
 .live__keys {
-  position: absolute;
-  right: 1rem;
-  bottom: 3.25rem;
-  z-index: 2;
-  max-width: min(20rem, calc(100vw - 2rem));
-  max-height: min(70vh, 36rem);
-  overflow: auto;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius);
-  background: var(--hud-bg);
-  -webkit-backdrop-filter: blur(16px) saturate(1.25);
-  backdrop-filter: blur(16px) saturate(1.25);
+  position: relative;
+  z-index: 3;
   font-family: var(--font-mono);
   font-size: 0.78rem;
   color: var(--color-text);
 }
 .live__keys-toggle {
-  cursor: pointer;
   list-style: none;
-  padding: 0.45rem 0.65rem;
-  letter-spacing: 0.12em;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--color-text-muted);
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-surface) 78%, transparent);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 0.4rem 0.72rem;
   user-select: none;
+  white-space: nowrap;
 }
 .live__keys-toggle::-webkit-details-marker { display: none; }
 .live__keys[open] .live__keys-toggle {
-  border-bottom: 1px solid var(--hairline);
+  border-color: var(--color-accent);
   color: var(--color-accent);
-  position: sticky;
-  top: 0;
-  background: var(--hud-bg);
-  z-index: 1;
 }
 .live__keys-body {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 5;
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  padding: 0.55rem 0.55rem 0.65rem;
+  width: min(24rem, calc(100vw - 1.25rem));
+  max-height: min(55vh, 28rem);
+  overflow: auto;
+  padding: 0.55rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--hud-bg);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  backdrop-filter: blur(16px) saturate(1.25);
+  box-sizing: border-box;
 }
 .live__keys-pane {
   border: 1px solid color-mix(in srgb, var(--hairline) 80%, transparent);
   border-radius: 8px;
   background: color-mix(in srgb, var(--color-surface) 35%, transparent);
   overflow: hidden;
+  min-width: 0;
+}
+.live__keys-pane[hidden],
+.live__keys-table tr[hidden] {
+  display: none !important;
 }
 .live__keys-pane--gen {
   border-color: color-mix(in srgb, var(--color-amber) 28%, var(--hairline));
@@ -348,8 +358,10 @@
   margin: 0;
   padding: 0.4rem 0.55rem 0.15rem;
   font-size: 0.7rem;
-  line-height: 1.35;
+  line-height: 1.4;
   color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .live__keys-note strong {
   color: var(--color-text);
@@ -357,19 +369,27 @@
 }
 .live__keys-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
 }
 .live__keys-table th,
 .live__keys-table td {
-  padding: 0.32rem 0.55rem;
+  padding: 0.35rem 0.55rem;
   text-align: left;
   vertical-align: top;
+  line-height: 1.35;
 }
 .live__keys-table th {
-  white-space: nowrap;
+  width: 34%;
+  white-space: normal;
   color: var(--color-text-muted);
   font-weight: 500;
-  width: 42%;
+}
+.live__keys-table td {
+  width: 66%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  hyphens: auto;
 }
 .live__keys-table tr + tr th,
 .live__keys-table tr + tr td {
@@ -379,6 +399,7 @@
 .live__keys-note kbd {
   display: inline-block;
   min-width: 1.35rem;
+  margin: 0.05rem 0.08rem 0.05rem 0;
   padding: 0.08rem 0.35rem;
   border: 1px solid var(--hairline);
   border-radius: 4px;
@@ -387,6 +408,7 @@
   font-size: 0.72rem;
   text-align: center;
   color: var(--color-text);
+  white-space: nowrap;
 }
 
 /* ---- Telemetry readouts -------------------------------------------------- */
@@ -429,8 +451,198 @@
   transition: width 200ms linear;
 }
 
+/* ---- Mode pill / cross-links -------------------------------------------- */
+.live__mode-pill {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 45%, transparent);
+  color: var(--color-accent);
+}
+.live__mode-link {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+.live__mode-link:hover {
+  color: var(--color-accent);
+  border-color: var(--hairline);
+}
+.live__btn--mode[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--color-amber) 60%, transparent);
+  color: var(--color-amber);
+}
+
+/* ---- Compact "more" menu (minimal chrome) ------------------------------- */
+.live__more {
+  position: relative;
+}
+.live__more[hidden] { display: none !important; }
+.live__more-toggle {
+  list-style: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-surface) 78%, transparent);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 0.4rem 0.72rem;
+  user-select: none;
+}
+.live__more-toggle::-webkit-details-marker { display: none; }
+.live__more[open] .live__more-toggle {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.live__more-body {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  min-width: min(18rem, calc(100vw - 2rem));
+  max-width: min(22rem, calc(100vw - 1.5rem));
+  padding: 0.55rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--hud-bg);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  backdrop-filter: blur(16px) saturate(1.25);
+}
+.live__btn--chrome[aria-pressed="true"],
+.live__btn--pad[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
+  color: var(--color-accent);
+}
+
+/* ---- Minimal chrome: trajectory-first ----------------------------------- */
+.live[data-chrome="minimal"] .live__status {
+  display: none;
+}
+.live[data-chrome="minimal"] .live__select--clip {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+.live[data-chrome="minimal"] .live__select--clip select {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 0.9rem;
+  padding: 0.5rem 0.75rem;
+}
+.live[data-chrome="minimal"] .live__controls {
+  flex: 1 1 100%;
+  justify-content: flex-start;
+}
+.live[data-chrome="minimal"] .live__telemetry .tm:nth-child(n+7) {
+  display: none;
+}
+
+/* ---- Virtual stick / pad (Gen on mobile / compact) ---------------------- */
+.live__pad {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 3.4rem;
+  z-index: 2;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 1rem 0.75rem;
+  pointer-events: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.live__pad[hidden] { display: none !important; }
+.live__stick,
+.live__pad-actions {
+  pointer-events: auto;
+}
+.live__stick-base {
+  width: 7.5rem;
+  height: 7.5rem;
+  border-radius: 50%;
+  border: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--color-bg) 45%, transparent);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  backdrop-filter: blur(10px) saturate(1.2);
+  position: relative;
+  touch-action: none;
+}
+.live__stick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2.6rem;
+  height: 2.6rem;
+  margin: -1.3rem 0 0 -1.3rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-accent) 55%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-accent) 50%, transparent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-accent) 22%, transparent);
+  will-change: transform;
+}
+.live__pad-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  width: 9.5rem;
+}
+.live__pad-btn {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-bg) 50%, transparent);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 0.85rem 0.4rem;
+  min-height: 2.85rem;
+  touch-action: none;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+.live__pad-btn[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+}
+.live__pad-btn--sprint[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--color-amber) 60%, transparent);
+  color: var(--color-amber);
+}
+.live__pad-btn--crouch {
+  grid-column: 1 / -1;
+}
+
+.live[data-hud="off"] .live__topbar,
+.live[data-hud="off"] .live__telemetry,
+.live[data-hud="off"] .live__progress {
+  display: none !important;
+}
+.live[data-hud="off"] .live__pad {
+  bottom: 1rem;
+}
+
 /* ---- Responsive: stack the bar on narrow screens ------------------------- */
-@media (max-width: 680px) {
+@media (max-width: 720px) {
   .live__topbar {
     flex-wrap: wrap;
     gap: 0.5rem 0.8rem;
@@ -441,15 +653,16 @@
     flex-basis: 100%;
   }
   .live__controls { order: 2; }
-  .live__keys {
-    right: 0.75rem;
-    bottom: auto;
-    top: 4.5rem;
-    max-width: calc(100vw - 1.5rem);
-  }
   .live__telemetry {
     gap: 0.25rem 1.1rem;
     padding: 0.55rem 0.75rem;
   }
   .tm__v { font-size: 0.82rem; }
+  .live__pad {
+    bottom: 4.1rem;
+  }
+  .live__stick-base {
+    width: 8rem;
+    height: 8rem;
+  }
 }

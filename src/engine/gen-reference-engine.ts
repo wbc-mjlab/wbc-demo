@@ -18,7 +18,11 @@ export interface GenReferenceEngine {
   pushProprio(sample: GenProprioSample): void;
   setHeightCmd(heightM: number): void;
   seedHeight(heightM: number): void;
+  setStyle(style: number | string): void;
+  setStyleAndHeight(style: number | string): void;
   heightCmd(): number;
+  styleIndex(): number;
+  hasStyle(): boolean;
   historyReady(): boolean;
   /** One Gen step → Arc length `outputDim` (39). */
   step(vx: number, vy: number, wz: number): Promise<Float32Array>;
@@ -52,8 +56,20 @@ export async function createGenReferenceEngine(
       const [lo, hi] = playRange(params, 'height', [0.75, 0.85]);
       obs.seedHeight(clamp(heightM, lo, hi));
     },
+    setStyle(style) {
+      obs.setStyle(style);
+    },
+    setStyleAndHeight(style) {
+      obs.setStyleAndHeight(style);
+    },
     heightCmd() {
       return obs.getHeightCmd();
+    },
+    styleIndex() {
+      return obs.getStyleIndex();
+    },
+    hasStyle() {
+      return obs.hasStyle();
     },
     historyReady() {
       return obs.isHistoryReady();

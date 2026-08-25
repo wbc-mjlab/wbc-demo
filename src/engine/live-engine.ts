@@ -65,23 +65,19 @@ import {
 import { makeGenProprioReader, type GenProprioReader } from './gen-proprio';
 import { clamp, playRange } from './gen-params';
 
-// Training-parity physics timing (wbc-mjlab SimulationCfg / MujocoCfg).
-const PHYS_TIMESTEP = 0.005;
-
+// Physics: use scene_g1.xml as-is (unitree_rl_mjlab/simulate deploy sim; MuJoCo default
+// timestep 0.002 s, no injected <option>). Policy still runs at policy_step_dt (50 Hz).
 /** Stick/key cruise × gait vel_mult, then clamped to gen play_vel_ranges. */
-const CRUISE_VX: [number, number] = [-1.0, 1.4];
+const CRUISE_VX: [number, number] = [-1.0, 1.2];
 const CRUISE_VY: [number, number] = [-1.0, 1.0];
 const CRUISE_WZ: [number, number] = [-2.0, 2.0];
-/** Match deploy reference_node gait heights + multipliers (crouch > sprint > walk). */
+/** Match wbc_g1_deploy config.yaml reference_node gait heights + vel_mult. */
 const STAND_HEIGHT = 0.81;
 const SPRINT_HEIGHT = 0.75;
 const CROUCH_HEIGHT = 0.55;
 const WALK_VEL_MULT = 1.0;
 const SPRINT_VEL_MULT = 3.5;
-const CROUCH_VEL_MULT = 0.8;
-const SOLVER_ITER = 10;
-const SOLVER_LS_ITER = 20;
-const INTEGRATOR = 'implicitfast';
+const CROUCH_VEL_MULT = 0.9;
 const SCENE_XML = 'scene_g1.xml';
 
 // The 34 STL basenames referenced by scene_g1.xml.
@@ -108,12 +104,16 @@ export type RefSource = 'clips' | 'gen';
 export type CameraMode = 'orbit' | 'chase';
 
 /** Held teleop axes in [-1, 1]; Shift≈RT sprint, Space≈RB crouch. */
+export type GenPosture = 'loco' | 'sit';
+
 export interface GenTeleopInput {
   forward: number;
   strafe: number;
   yaw: number;
   sprint: boolean;
   crouch: boolean;
+  /** Sticky sit posture; overrides crouch/sprint style when not loco. */
+  posture?: GenPosture;
 }
 
 export interface LiveStatus {
@@ -221,6 +221,8 @@ export interface LiveEngineHandle {
   toggleGen(): Promise<boolean>;
   /** Update held Gen teleop axes (W/S, Q/E strafe, A/D yaw, Shift=sprint, Space=crouch). */
   setGenTeleop(input: Partial<GenTeleopInput>): void;
+  /** D-pad / Arrow: +1 = sit, -1 = loco. */
+  nudgeGenPosture(delta: 1 | -1): void;
   /** Seed Gen height to stand / sprint / crouch target (usually driven by teleop). */
   setGenGaitHeight(kind: 'stand' | 'sprint' | 'crouch'): void;
   /** Shove the base with a horizontal impulse (m/s); random direction. */
@@ -237,15 +239,6 @@ export interface LiveEngineHandle {
   /** Move the viewport canvas into a new container (engine-pool reuse). */
   reparent(container: HTMLElement): void;
   dispose(): void;
-}
-
-/** Inject an <option> after the opening <mujoco …> tag to pin physics timing. */
-function pinPhysicsOption(xml: string): string {
-  if (/<option[\s>]/.test(xml)) return xml;
-  const option =
-    `\n  <option timestep="${PHYS_TIMESTEP}" integrator="${INTEGRATOR}" ` +
-    `iterations="${SOLVER_ITER}" ls_iterations="${SOLVER_LS_ITER}"/>`;
-  return xml.replace(/(<mujoco\b[^>]*>)/, `$1${option}`);
 }
 
 export async function createLiveEngine(
@@ -286,7 +279,6 @@ export async function createLiveEngine(
     status.error = m; opts.onError?.(m); throw new Error(m);
   }
   status.obsDim = cfg.obsDim;
-  status.decimation = Math.round(cfg.policyStepDt / PHYS_TIMESTEP);
 
   msg('Loading MuJoCo WASM + policy…');
   let sim: MujocoSim;
@@ -297,7 +289,6 @@ export async function createLiveEngine(
         baseUrl: opts.mjcfBaseUrl,
         sceneXml: SCENE_XML,
         meshFiles: MESH_FILES,
-        xmlTransform: pinPhysicsOption,
         onProgress: (n, total) => msg(`Fetching meshes ${n}/${total}…`),
       }),
       loadPolicy({
@@ -310,6 +301,7 @@ export async function createLiveEngine(
     const m = `engine load failed: ${String(err)}`;
     status.error = m; opts.onError?.(m); throw new Error(m);
   }
+  status.decimation = Math.max(1, Math.round(cfg.policyStepDt / sim.timestep));
   status.modelObsDim = policy.obsDim;
   status.actionDim = policy.actionDim;
   status.loadMs = Math.round(performance.now() - t0);
@@ -480,9 +472,11 @@ export async function createLiveEngine(
     yaw: 0,
     sprint: false,
     crouch: false,
+    posture: 'loco',
   };
   let gaitCrouchWas = false;
   let gaitSprintWas = false;
+  let genPostureWas: GenPosture = 'loco';
   let lastGenArc: Float32Array | null = null;
   const followTarget = new Vector3();
   const viewCenter = new Vector3();
@@ -521,6 +515,23 @@ export async function createLiveEngine(
     return axis * (-lo); // lo typically negative
   }
 
+  function genStyleIndexFor(
+    posture: GenPosture,
+    crouch: boolean,
+    sprint: boolean,
+  ): number {
+    if (posture === 'sit') return 3;
+    if (crouch) return 1; // crouch
+    if (sprint) return 2; // run
+    return 0; // stand_walk
+  }
+
+  function nudgePosture(cur: GenPosture, delta: number): GenPosture {
+    if (delta > 0) return 'sit';
+    if (delta < 0) return 'loco';
+    return cur;
+  }
+
   function genVelMult(crouch: boolean, sprint: boolean): number {
     if (crouch) return CROUCH_VEL_MULT;
     if (sprint) return SPRINT_VEL_MULT;
@@ -537,9 +548,31 @@ export async function createLiveEngine(
     if (!gen) return;
     const crouch = genTeleop.crouch;
     const sprint = genTeleop.sprint;
-    const h = genHeightFor(crouch, sprint);
+    const posture = genTeleop.posture ?? 'loco';
     const edge =
-      crouch !== gaitCrouchWas || (sprint !== gaitSprintWas && !crouch);
+      crouch !== gaitCrouchWas ||
+      (sprint !== gaitSprintWas && !crouch) ||
+      posture !== genPostureWas;
+
+    if (gen.hasStyle()) {
+      const styleIdx = genStyleIndexFor(posture, crouch, sprint);
+      if (seedOnEdge && (edge || styleIdx !== gen.styleIndex())) {
+        gen.setStyleAndHeight(styleIdx);
+        const name = gen.params.command.styleNames[styleIdx] ?? String(styleIdx);
+        msg(
+          `Gen style=${name} posture=${posture} (h=${gen.heightCmd().toFixed(2)} m, vel×${genVelMult(crouch, sprint).toFixed(2)})`,
+        );
+      } else {
+        gen.setStyle(styleIdx);
+        gen.setHeightCmd(gen.heightCmd());
+      }
+      gaitCrouchWas = crouch;
+      gaitSprintWas = sprint;
+      genPostureWas = posture;
+      return;
+    }
+
+    const h = genHeightFor(crouch, sprint);
     if (seedOnEdge && edge) {
       gen.seedHeight(h);
       if (crouch !== gaitCrouchWas) {
@@ -556,15 +589,16 @@ export async function createLiveEngine(
     }
     gaitCrouchWas = crouch;
     gaitSprintWas = sprint;
+    genPostureWas = posture;
   }
 
   function genCmdFromTeleop(): { vx: number; vy: number; wz: number } {
     if (!gen) return { vx: 0, vy: 0, wz: 0 };
     applyGenGaitHeight(true);
     const velMult = genVelMult(genTeleop.crouch, genTeleop.sprint);
-    const [pxLo, pxHi] = playRange(gen.params, 'lin_vel_x', [-1.5, 4.5]);
-    const [pyLo, pyHi] = playRange(gen.params, 'lin_vel_y', [-2, 2]);
-    const [pzLo, pzHi] = playRange(gen.params, 'ang_vel_z', [-5, 5]);
+    const [pxLo, pxHi] = playRange(gen.params, 'lin_vel_x', [-1.5, 5.0]);
+    const [pyLo, pyHi] = playRange(gen.params, 'lin_vel_y', [-1.0, 1.0]);
+    const [pzLo, pzHi] = playRange(gen.params, 'ang_vel_z', [-4.0, 4.0]);
     const vx = clamp(
       cruiseFromAxis(genTeleop.forward, CRUISE_VX[0], CRUISE_VX[1]) * velMult,
       pxLo,
@@ -597,11 +631,17 @@ export async function createLiveEngine(
     status.playing = false;
     enterClipSelectMode(fsm);
     gen.reset();
-    gen.seedHeight(STAND_HEIGHT);
+    if (gen.hasStyle()) {
+      gen.setStyleAndHeight(0);
+    } else {
+      gen.seedHeight(STAND_HEIGHT);
+    }
     gaitCrouchWas = false;
     gaitSprintWas = false;
+    genPostureWas = 'loco';
     genTeleop.sprint = false;
     genTeleop.crouch = false;
+    genTeleop.posture = 'loco';
     // Warm history like deploy (~20 proprio pushes).
     for (let i = 0; i < 20; i++) gen.pushProprio(genProprio.sample());
     refSource = 'gen';
@@ -609,7 +649,7 @@ export async function createLiveEngine(
     controller.resetActions();
     syncFsmStatus();
     msg(
-      'Switched to Generator — W/S move, Q/E strafe, A/D turn, Shift=sprint, Space=crouch',
+      'Switched to Generator — W/S move, Q/E strafe, A/D turn, Shift=sprint, Space=crouch, ↓/↑ sit↔loco',
     );
     return true;
   }
@@ -1104,12 +1144,25 @@ export async function createLiveEngine(
       if (input.yaw != null) genTeleop.yaw = clamp(input.yaw, -1, 1);
       if (input.sprint != null) genTeleop.sprint = Boolean(input.sprint);
       if (input.crouch != null) genTeleop.crouch = Boolean(input.crouch);
+      if (input.posture != null) genTeleop.posture = input.posture;
+    },
+    nudgeGenPosture(delta: 1 | -1) {
+      if (refSource !== 'gen' || !gen?.hasStyle()) return;
+      genTeleop.posture = nudgePosture(genTeleop.posture ?? 'loco', delta);
+      applyGenGaitHeight(true);
+      status.genHeight = +gen.heightCmd().toFixed(2);
     },
     setGenGaitHeight(kind: 'stand' | 'sprint' | 'crouch') {
       if (refSource !== 'gen' || !gen) return;
-      const h =
-        kind === 'crouch' ? CROUCH_HEIGHT : kind === 'sprint' ? SPRINT_HEIGHT : STAND_HEIGHT;
-      gen.seedHeight(h);
+      if (gen.hasStyle()) {
+        genTeleop.posture = 'loco';
+        const styleIdx = kind === 'crouch' ? 1 : kind === 'sprint' ? 2 : 0;
+        gen.setStyleAndHeight(styleIdx);
+      } else {
+        const h =
+          kind === 'crouch' ? CROUCH_HEIGHT : kind === 'sprint' ? SPRINT_HEIGHT : STAND_HEIGHT;
+        gen.seedHeight(h);
+      }
       status.genHeight = +gen.heightCmd().toFixed(2);
     },
     perturb(magnitude = 3.0) {

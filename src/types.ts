@@ -143,7 +143,7 @@ export interface PolicyArtifacts {
    */
   config?: string;
   /**
-   * Optional Gen params folder (`wbc_gen_deploy_params_v1`), e.g. `gen/params/`.
+   * Optional Gen params folder (`wbc_gen_deploy_params_v2`), e.g. `gen/params/`.
    * Enables Generator locomotion as an alternate Arc source.
    */
   gen?: string;

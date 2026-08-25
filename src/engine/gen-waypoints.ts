@@ -66,15 +66,3 @@ export function lowpassHeightWaypoints(
     heightWp[i] = expSmooth(heightWp[i]!, heightWp[i + 1]!, dt, tau);
   }
 }
-
-export function packCommandXyHeightAngle(
-  xy: Float32Array,
-  height: Float32Array,
-  ang: Float32Array,
-): Float32Array {
-  const out = new Float32Array(xy.length + height.length + ang.length);
-  out.set(xy, 0);
-  out.set(height, xy.length);
-  out.set(ang, xy.length + height.length);
-  return out;
-}

@@ -51,10 +51,11 @@ const visible = new Set<ClipCard>();
 const booting = new Set<ClipCard>();
 let creating = 0;
 
+/** Clip cards open tracking mode so the selected reference plays immediately. */
 function demoHref(policyId: string, clipId: string): string {
   const b = import.meta.env.BASE_URL;
   const q = new URLSearchParams({ id: policyId, clip: clipId });
-  return `${b}?${q}`;
+  return `${b}tracking.html?${q}`;
 }
 
 function isLiveCapable(entry: PolicyEntry): boolean {
@@ -224,12 +225,17 @@ async function render(): Promise<void> {
   if (!root) return;
   const policies = discoverPolicies();
   const home = import.meta.env.BASE_URL;
+  const tracking = `${home}tracking.html`;
 
   root.innerHTML = `
     <header class="site-header">
       <div class="site-header__row">
         <div>
-          <p class="back-link"><a href="${home}">← demo</a></p>
+          <p class="back-link">
+            <a href="${home}">← gen demo</a>
+            ·
+            <a href="${tracking}">tracking</a>
+          </p>
           <h1>wbc-mjlab policy demos</h1>
         </div>
         ${themeToggleHtml('gallery-theme')}
@@ -237,7 +243,7 @@ async function render(): Promise<void> {
       <p>
         Interactive in-browser whole-body control. Every card is a motion clip
         tracked <strong>live in its own MuJoCo sim</strong> — scroll to bring more
-        to life, click one to dive in and take the controls.
+        to life, click one to open <strong>tracking</strong> mode on that clip.
       </p>
     </header>
     <div class="gallery gallery--live" id="grid"></div>`;

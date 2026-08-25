@@ -1,5 +1,5 @@
 /**
- * History rings + flat state ‖ command packing for `generator.onnx`.
+ * History rings + flat state ‖ command (term_names order) for `generator.onnx`.
  * Port of deploy `GenObsBuilder`.
  */
 
@@ -8,7 +8,6 @@ import { clamp, playRange } from './gen-params';
 import {
   integrateVelToSparseWaypoints,
   lowpassHeightWaypoints,
-  packCommandXyHeightAngle,
 } from './gen-waypoints';
 
 export type GenProprioSample = Record<string, Float32Array>;
@@ -39,6 +38,7 @@ export class GenObsBuilder {
   private historyReady = false;
   private heightCmd = 0.8;
   private heightWp = new Float32Array(0);
+  private styleIndex = 0;
 
   constructor(private readonly params: GenDeployParams) {
     for (const name of params.stateObservationNames) this.rings.set(name, []);
@@ -63,6 +63,39 @@ export class GenObsBuilder {
 
   getHeightCmd(): number {
     return this.heightCmd;
+  }
+
+  hasStyle(): boolean {
+    return this.params.command.styleDim > 0;
+  }
+
+  getStyleIndex(): number {
+    return this.styleIndex;
+  }
+
+  setStyle(style: number | string): void {
+    if (this.params.command.styleDim <= 0) return;
+    if (typeof style === 'string') {
+      const idx = this.params.command.styleNames.indexOf(style);
+      if (idx < 0) throw new Error(`Unknown locomotion style: ${style}`);
+      this.styleIndex = idx;
+    } else {
+      this.styleIndex = clamp(
+        Math.trunc(style),
+        0,
+        this.params.command.styleDim - 1,
+      );
+    }
+  }
+
+  setStyleAndHeight(style: number | string): void {
+    this.setStyle(style);
+    if (!this.hasStyle()) return;
+    const name = this.params.command.styleNames[this.styleIndex];
+    if (!name) return;
+    const range = this.params.command.styleHeightRanges[name];
+    if (!range) return;
+    this.seedHeight(0.5 * (range[0] + range[1]));
   }
 
   isHistoryReady(): boolean {
@@ -124,41 +157,64 @@ export class GenObsBuilder {
       }
     }
 
+    const horizons = this.params.command.horizons;
     const { xy, ang } = integrateVelToSparseWaypoints(
       vx,
       vy,
       wz,
-      this.params.command.horizons,
+      horizons,
       this.params.stepDt,
       this.params.command.positionScale,
     );
 
-    let height = new Float32Array(0);
     const scale = this.params.command.heightScale;
     if (!(scale > 0)) throw new Error('command.height_scale must be positive');
-    if (this.params.command.heightSetpointDim > 0) {
-      height = new Float32Array(this.params.command.heightSetpointDim);
-      height.fill(this.heightCmd / scale);
-    } else if (this.params.command.heightFeaturesPerHorizon > 0) {
-      if (this.heightWp.length !== this.params.command.horizons.length) {
-        this.seedHeight(this.heightCmd);
+
+    for (const name of this.params.command.termNames) {
+      const term = this.params.command.observations[name];
+      if (!term) throw new Error(`Missing command observation ${name}`);
+      let block: Float32Array;
+      if (name === 'cmd_style') {
+        block = new Float32Array(term.flatWidth);
+        const idx = clamp(this.styleIndex, 0, Math.max(term.flatWidth - 1, 0));
+        if (term.flatWidth > 0) block[idx] = 1;
+      } else if (name === 'cmd_xy_waypoints') {
+        block = xy;
+      } else if (name === 'cmd_angle_waypoints') {
+        block = ang;
+      } else if (name === 'cmd_height_setpoint') {
+        block = new Float32Array(term.flatWidth);
+        block.fill(this.heightCmd / scale);
+      } else if (name === 'cmd_height_waypoints') {
+        if (this.heightWp.length !== horizons.length) {
+          this.seedHeight(this.heightCmd);
+        }
+        lowpassHeightWaypoints(
+          this.heightWp,
+          this.heightCmd,
+          this.params.stepDt,
+          horizons,
+          this.params.command.heightLowpassTau,
+        );
+        block = new Float32Array(this.heightWp.length);
+        for (let i = 0; i < this.heightWp.length; i++) {
+          block[i] = this.heightWp[i]! / scale;
+        }
+      } else if (name.startsWith('cmd_future_')) {
+        // Teleop does not synthesize future-Arc fields; zeros keep dim layout.
+        block = new Float32Array(term.flatWidth);
+      } else {
+        throw new Error(`Unsupported command term for teleop packing: ${name}`);
       }
-      lowpassHeightWaypoints(
-        this.heightWp,
-        this.heightCmd,
-        this.params.stepDt,
-        this.params.command.horizons,
-        this.params.command.heightLowpassTau,
-      );
-      height = new Float32Array(this.heightWp.length);
-      for (let i = 0; i < this.heightWp.length; i++) {
-        height[i] = this.heightWp[i]! / scale;
+      if (block.length !== term.flatWidth) {
+        throw new Error(
+          `Command term ${name} width ${block.length} != flat_width ${term.flatWidth}`,
+        );
       }
+      obs.set(block, k);
+      k += block.length;
     }
 
-    const cmd = packCommandXyHeightAngle(xy, height, ang);
-    obs.set(cmd, k);
-    k += cmd.length;
     if (k !== this.params.inputDim) {
       throw new Error(`Built obs dim ${k} != input_dim ${this.params.inputDim}`);
     }
