@@ -338,7 +338,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
                     <tr><th scope="row"><kbd>Space</kbd></th><td>Crouch style</td></tr>
                     <tr><th scope="row"><kbd>↓</kbd></th><td>Sit</td></tr>
                     <tr><th scope="row"><kbd>↑</kbd></th><td>Return to walk / run / crouch</td></tr>
-                    <tr><th scope="row">Pad</th><td>On-screen stick · run · crouch</td></tr>
+                    <tr><th scope="row">Pad</th><td>Analog stick (drag) · run · crouch</td></tr>
                   </tbody>
                 </table>
               </section>`}
@@ -1058,24 +1058,27 @@ function wireVirtualPad(opts: {
 }): () => void {
   const { stickEl, stickKnob, sprintEl, crouchEl, yawLEl, yawREl, pad, onChange } = opts;
   let activePointer: number | null = null;
+  /** Grab origin — drag distance from here sets analog magnitude (not absolute base position). */
+  let originX = 0;
+  let originY = 0;
+  let maxRadius = 48;
 
-  const setStick = (clientX: number, clientY: number): void => {
-    const base = stickEl.querySelector('.live__stick-base') as HTMLElement;
-    const rect = base.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    const max = rect.width * 0.38;
-    let dx = clientX - cx;
-    let dy = clientY - cy;
-    const len = Math.hypot(dx, dy) || 1;
-    if (len > max) {
-      dx = (dx / len) * max;
-      dy = (dy / len) * max;
+  const applyStick = (clientX: number, clientY: number): void => {
+    const dx = clientX - originX;
+    const dy = clientY - originY;
+    const len = Math.hypot(dx, dy);
+    const mag = maxRadius > 0 ? Math.min(1, len / maxRadius) : 0;
+    let nx = 0;
+    let ny = 0;
+    if (len > 1e-6) {
+      nx = dx / len;
+      ny = dy / len;
     }
-    stickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+    stickKnob.style.transform = `translate(${nx * mag * maxRadius}px, ${ny * mag * maxRadius}px)`;
+    // Unit-circle axes: magnitude ∝ drag distance from grab, direction = drag angle.
     // Screen Y down → negative forward; X right → negative strafe (Q = +strafe left).
-    pad.forward = clampAxis(-dy / max);
-    pad.strafe = clampAxis(-dx / max);
+    pad.forward = clampAxis(-ny * mag);
+    pad.strafe = clampAxis(-nx * mag);
     onChange();
   };
 
@@ -1090,13 +1093,19 @@ function wireVirtualPad(opts: {
   const onStickDown = (e: PointerEvent): void => {
     e.preventDefault();
     activePointer = e.pointerId;
+    const base = stickEl.querySelector('.live__stick-base') as HTMLElement;
+    const rect = base.getBoundingClientRect();
+    // Travel ≈ base radius minus knob half-size so full deflection is reachable.
+    maxRadius = Math.max(28, rect.width * 0.42);
+    originX = e.clientX;
+    originY = e.clientY;
     stickEl.setPointerCapture(e.pointerId);
-    setStick(e.clientX, e.clientY);
+    applyStick(e.clientX, e.clientY);
   };
   const onStickMove = (e: PointerEvent): void => {
     if (activePointer !== e.pointerId) return;
     e.preventDefault();
-    setStick(e.clientX, e.clientY);
+    applyStick(e.clientX, e.clientY);
   };
   const onStickUp = (e: PointerEvent): void => {
     if (activePointer !== e.pointerId) return;

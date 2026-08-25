@@ -374,9 +374,11 @@
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  width: min(24rem, calc(100vw - 1.25rem));
-  max-height: min(55vh, 28rem);
-  overflow: auto;
+  width: min(26rem, calc(100vw - 1.25rem));
+  max-height: min(72vh, calc(100dvh - 5.5rem));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0.55rem;
   border: 1px solid var(--hairline);
   border-radius: var(--radius);
@@ -384,13 +386,15 @@
   -webkit-backdrop-filter: blur(16px) saturate(1.25);
   backdrop-filter: blur(16px) saturate(1.25);
   box-sizing: border-box;
+  -webkit-overflow-scrolling: touch;
 }
 .live__keys-pane {
   border: 1px solid color-mix(in srgb, var(--hairline) 80%, transparent);
   border-radius: 8px;
   background: color-mix(in srgb, var(--color-surface) 35%, transparent);
-  overflow: hidden;
+  overflow: visible;
   min-width: 0;
+  flex: 0 0 auto;
 }
 .live__keys-pane[hidden],
 .live__keys-table tr[hidden] {
@@ -461,21 +465,22 @@
 }
 .live__keys-table th,
 .live__keys-table td {
-  padding: 0.35rem 0.55rem;
+  padding: 0.42rem 0.55rem;
   text-align: left;
   vertical-align: top;
-  line-height: 1.35;
+  line-height: 1.45;
+  height: auto;
+  white-space: normal;
 }
 .live__keys-table th {
-  width: 34%;
-  white-space: normal;
+  width: 36%;
   color: var(--color-text-muted);
   font-weight: 500;
 }
 .live__keys-table td {
-  width: 66%;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  width: 64%;
+  overflow-wrap: break-word;
+  word-break: normal;
   hyphens: auto;
 }
 .live__keys-table tr + tr th,
@@ -715,6 +720,7 @@
   border-color: color-mix(in srgb, var(--color-amber) 60%, transparent);
   color: var(--color-amber);
 }
+.live__pad-btn--sprint,
 .live__pad-btn--crouch {
   grid-column: 1 / -1;
 }
@@ -831,5 +837,17 @@
   .live__stick-base {
     width: 8rem;
     height: 8rem;
+  }
+  .live__keys-body {
+    left: 0.5rem;
+    right: 0.5rem;
+    width: auto;
+    max-height: min(68dvh, calc(100dvh - 4.5rem));
+  }
+  .live__keys-note,
+  .live__keys-table th,
+  .live__keys-table td {
+    font-size: 0.78rem;
+    line-height: 1.5;
   }
 }
