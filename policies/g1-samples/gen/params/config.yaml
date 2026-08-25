@@ -1,7 +1,7 @@
-# wbc_gen_deploy_params_v1 robot='g1' overlay='wbc_ref'
-schema_version: wbc_gen_deploy_params_v1
+# wbc_gen_deploy_params_v2 robot='g1' overlay='wbc_loco_style'
+schema_version: wbc_gen_deploy_params_v2
 robot_id: g1
-overlay: wbc_ref
+overlay: wbc_loco_style
 step_dt: 0.02
 joint_names: [left_hip_pitch_joint, left_hip_roll_joint, left_hip_yaw_joint, left_knee_joint,
   left_ankle_pitch_joint, left_ankle_roll_joint, right_hip_pitch_joint, right_hip_roll_joint,
@@ -53,27 +53,75 @@ state:
       scale: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
         1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 command:
-  packing: xy_then_height_setpoint_then_angle
+  term_names: [cmd_style, cmd_xy_waypoints, cmd_height_setpoint, cmd_angle_waypoints]
+  concatenate_terms: true
+  enable_corruption: true
+  observations:
+    cmd_style:
+      training_name: cmd_style
+      deploy_name: cmd_style
+      dim: 4
+      flat_width: 4
+      history_length: 0
+      scale: [1.0, 1.0, 1.0, 1.0]
+      style_names: [stand_walk, crouch, run, sit]
+      style_height_ranges:
+        stand_walk: &id001 [0.65, 0.85]
+        crouch: &id002 [0.35, 0.55]
+        run: &id003 [0.7, 0.9]
+        sit: &id004 [0.25, 0.45]
+    cmd_xy_waypoints:
+      training_name: cmd_xy_waypoints
+      deploy_name: cmd_xy_waypoints
+      dim: 6
+      flat_width: 6
+      history_length: 0
+      scale: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+      horizons: [15, 30, 60]
+      position_scale: 3.6
+      features_per_horizon: 2
+    cmd_height_setpoint:
+      training_name: cmd_height_setpoint
+      deploy_name: cmd_height_setpoint
+      dim: 1
+      flat_width: 1
+      history_length: 0
+      scale: [1.0]
+      height_scale: 1.0
+      height_setpoint_dim: 1
+    cmd_angle_waypoints:
+      training_name: cmd_angle_waypoints
+      deploy_name: cmd_angle_waypoints
+      dim: 6
+      flat_width: 6
+      history_length: 0
+      scale: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+      horizons: [15, 30, 60]
+      features_per_horizon: 2
   horizons: [15, 30, 60]
+  command_style: styled_waypoints
+  height_as_setpoint: true
+  include_link_height: true
+  height_lowpass_tau: 0.0
   position_scale: 3.6
   height_scale: 1.0
-  xy_features_per_horizon: 2
-  height_features_per_horizon: 0
-  height_setpoint_dim: 1
-  angle_features_per_horizon: 2
-  term_names: [cmd_xy_waypoints, cmd_height_setpoint, cmd_angle_waypoints]
-  height_lowpass_tau: 0.0
+  style_names: [stand_walk, crouch, run, sit]
+  style_height_ranges:
+    stand_walk: *id001
+    crouch: *id002
+    run: *id003
+    sit: *id004
 outputs:
   field_order: [ref_base_height, ref_base_lin_vel_b, ref_base_ang_vel_b, ref_gravity_b,
     ref_joint_pos]
   field_dims: {ref_base_height: 1, ref_base_lin_vel_b: 3, ref_base_ang_vel_b: 3, ref_gravity_b: 3,
     ref_joint_pos: 29}
   layout: arc_reference
-dims: {input_dim: 653, state_dim: 640, command_dim: 13, output_dim: 39}
-model: {type: flow_ae, onnx_file: generator.onnx, onnx_input_name: obs, onnx_output_name: reference,
-  n_euler_steps: 4, latent_dim: 256}
+dims: {input_dim: 657, state_dim: 640, command_dim: 17, output_dim: 39}
+model: {type: cascade_ae, onnx_file: generator.onnx, onnx_input_name: obs, onnx_output_name: reference,
+  intent_dim: 10, refine: true, use_ae: true, latent_dim: 256}
 play_vel_ranges:
-  lin_vel_x: [-1.5, 4.0]
-  lin_vel_y: [-2.0, 2.0]
-  ang_vel_z: [-3.0, 3.0]
-  height: [0.45, 0.85]
+  lin_vel_x: [-1.5, 5.0]
+  lin_vel_y: [-1.0, 1.0]
+  ang_vel_z: [-4.0, 4.0]
+  height: [0.1, 0.85]

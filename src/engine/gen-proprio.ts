@@ -1,5 +1,10 @@
 /**
- * Fill Gen proprio terms from the live MuJoCo sim (same quantities as tracking).
+ * Fill Gen proprio terms from the live MuJoCo sim (same quantities as tracking /
+ * ``wbc_g1_deploy`` ``proprio_from_articulation``).
+ *
+ * Optional augmented terms (when listed in gen params ``state.observation_names``):
+ *   - ``joint_torque`` — MJCF ``jointactuatorfrc`` ``{joint}_torque`` (≈ Unitree ``tau_est``)
+ *   - ``imu_lin_acc``  — MJCF accelerometer ``imu_acc`` (base-frame, ≈ Unitree accel)
  */
 
 import type { MujocoSim } from './mujoco';
@@ -34,6 +39,12 @@ interface GenJointMap {
   vAdr: Int32Array;
 }
 
+/** Sensor name → address into ``data.sensordata``. */
+interface SensorAdr {
+  adr: number;
+  dim: number;
+}
+
 function buildJointMap(sim: MujocoSim, jointNames: string[]): GenJointMap {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const jntQposAdr: any = sim.model.jnt_qposadr;
@@ -58,6 +69,44 @@ function buildJointMap(sim: MujocoSim, jointNames: string[]): GenJointMap {
   return { qAdr, vAdr };
 }
 
+function resolveSensor(sim: MujocoSim, name: string): SensorAdr {
+  const acc = sim.model.sensor(name);
+  try {
+    const adr = Number(acc.adr);
+    const dim = Number(acc.dim);
+    if (!Number.isFinite(adr) || !Number.isFinite(dim) || dim < 1) {
+      throw new Error(`gen: sensor "${name}" has invalid adr/dim`);
+    }
+    return { adr, dim };
+  } finally {
+    acc.delete();
+  }
+}
+
+/** ``left_hip_pitch_joint`` → ``left_hip_pitch_torque`` (scene_g1.xml naming). */
+function torqueSensorName(jointName: string): string {
+  if (jointName.endsWith('_joint')) {
+    return `${jointName.slice(0, -'_joint'.length)}_torque`;
+  }
+  return `${jointName}_torque`;
+}
+
+function buildTorqueSensorMap(sim: MujocoSim, jointNames: string[]): SensorAdr[] {
+  return jointNames.map((jn) => resolveSensor(sim, torqueSensorName(jn)));
+}
+
+function readSensorVec(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sensordata: any,
+  sensor: SensorAdr,
+  out: Float32Array,
+  offset = 0,
+): void {
+  for (let i = 0; i < sensor.dim; i++) {
+    out[offset + i] = sensordata[sensor.adr + i] as number;
+  }
+}
+
 export interface GenProprioReader {
   sample(): GenProprioSample;
 }
@@ -70,6 +119,13 @@ export function makeGenProprioReader(
   const map = buildJointMap(sim, params.jointNames);
   const defaults = Float32Array.from(params.defaultJointPos);
   const n = params.jointNames.length;
+  const wantTorque = params.stateObservationNames.includes('joint_torque');
+  const wantImu = params.stateObservationNames.includes('imu_lin_acc');
+  const torqueSensors = wantTorque ? buildTorqueSensorMap(sim, params.jointNames) : null;
+  const imuSensor = wantImu ? resolveSensor(sim, 'imu_acc') : null;
+  if (imuSensor && imuSensor.dim < 3) {
+    throw new Error(`gen: imu_acc dim ${imuSensor.dim} < 3`);
+  }
 
   return {
     sample(): GenProprioSample {
@@ -79,6 +135,8 @@ export function makeGenProprioReader(
       const qvel: any = sim.data.qvel;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const xquat: any = sim.data.xquat;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sensordata: any = sim.data.sensordata;
 
       const bq = baseBodyId * 4;
       const qw = xquat[bq] as number;
@@ -106,10 +164,21 @@ export function makeGenProprioReader(
         joint_pos_rel: jointPosRel,
         joint_vel_rel: jointVelRel,
       };
-      // Optional torque term (torques overlay); leave zeros if requested.
-      if (params.stateObservationNames.includes('joint_torque')) {
-        out.joint_torque = new Float32Array(n);
+
+      if (torqueSensors) {
+        const jointTorque = new Float32Array(n);
+        for (let j = 0; j < n; j++) {
+          jointTorque[j] = sensordata[torqueSensors[j]!.adr] as number;
+        }
+        out.joint_torque = jointTorque;
       }
+
+      if (imuSensor) {
+        const imu = new Float32Array(3);
+        readSensorVec(sensordata, imuSensor, imu);
+        out.imu_lin_acc = imu;
+      }
+
       return out;
     },
   };

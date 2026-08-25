@@ -10,14 +10,18 @@ not a pre-rendered video. Built with **Vite + TypeScript + Three.js**, deployed 
 static site to **GitHub Pages**.
 
 - **Gallery** — a wall of cards, each a motion clip tracked live in its own sim.
-  Scroll to bring more to life; click one to dive in.
-- **Per-policy page** — full-screen viewport with live controls: clip switch,
-  speed, a policy/open-loop toggle, a "push" perturbation, and camera framing.
-  **Generator starts on by default** when Gen assets are present (W/S move,
-  Q/E strafe, A/D turn, Shift boost). Press **G** (or **clips**) to switch to
-  regular clip tracking, or **G** again to return to Gen — same Arc→WBC path as
+  Scroll to bring more to life; click one to open **tracking** mode on that clip.
+- **Live / Gen demo** (`/`) — full-screen viewport. **Generator starts on by
+  default** when Gen assets are present (W/S move, Q/E strafe, A/D turn, Shift
+  sprint, Space crouch). On phones/tablets a **compact HUD** is the default
+  (trajectory dropdown + on-screen stick / shift / crouch). Press **G** (or
+  **clips**) for in-page clip tracking, or open the dedicated tracking URL.
+  Same Arc→WBC path as
   [wbc-g1-deploy](https://github.com/wbc-mjlab/wbc-g1-deploy)
   `wbc_reference_node` Gen mode (`policies/<id>/gen/params/`).
+- **Tracking page** (`/tracking.html`) — shareable **reference / clip tracking**
+  only (Generator off). Same query params: `?id=<policy>&clip=<clip>`.
+  Force HUD with `?chrome=minimal` or `?chrome=full`.
 - **Deploy-aligned clip UX** — browsable clips come from
   `policies/<id>/reference/manifest.yaml` (same idea as
   [wbc-g1-deploy](https://github.com/wbc-mjlab/wbc-g1-deploy) `config/clips/manifest.yaml`).
@@ -74,11 +78,15 @@ by [`policies/policy.schema.json`](policies/policy.schema.json) and mirrored by
 ## Project layout
 
 ```
-index.html / policy.html   # gallery + per-policy HTML entry points
+index.html / policy.html / tracking.html
+                           # live Gen demo, legacy deep links, tracking-only page
+gallery.html               # clip wall
 vite.config.ts             # base '/wbc-demo/'; serves policies/ in dev; multi-page build
 src/
-  main.ts                  # gallery: a live card per clip, shared engine pool
-  policy-page.ts           # per-policy full view: engine + control cluster + telemetry HUD
+  gallery.ts               # gallery: a live card per clip, shared engine pool
+  live-demo.ts             # shared HUD: chrome modes, teleop, virtual stick
+  policy-page.ts           # boots live-demo in Gen mode
+  tracking-page.ts         # boots live-demo in tracking / reference mode
   registry.ts              # build-time discovery + schema validation of policies
   validate-manifest.ts     # shared Ajv validator (registry + CI script)
   types.ts                 # PolicyManifest contract

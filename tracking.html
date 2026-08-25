@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>wbc-demo — tracking</title>
+    <meta
+      name="description"
+      content="Clip reference tracking mode for wbc-mjlab whole-body-control policies."
+    />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('wbc-demo-theme');
+          document.documentElement.dataset.theme =
+            t === 'light' || t === 'dark' ? t : 'dark';
+        } catch (e) {
+          document.documentElement.dataset.theme = 'dark';
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <main class="page" id="app"></main>
+    <script type="module" src="/src/tracking-page.ts"></script>
+  </body>
+</html>

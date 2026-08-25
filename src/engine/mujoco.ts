@@ -71,9 +71,7 @@ export async function loadG1Sim(opts: {
   onProgress?: (loaded: number, total: number) => void;
   /**
    * Optional transform applied to the scene XML text before it is compiled.
-   * The live engine uses this to inject an `<option>` that pins the physics
-   * timestep/integrator/solver to match training, without mutating the shared
-   * scene file (which the spike + source MJCF mirror unchanged).
+   * Deploy parity: scene is loaded as-is (same MJCF as unitree_rl_mjlab/simulate).
    */
   xmlTransform?: (xml: string) => string;
 }): Promise<MujocoSim> {
@@ -94,8 +92,7 @@ export async function loadG1Sim(opts: {
     /* already exists */
   }
 
-  // Fetch the scene XML as text, optionally transforming it (e.g. to pin the
-  // <option> physics timing for training parity).
+  // Fetch the scene XML as text, optionally transforming before compile.
   let xmlText = await fetchText(`${opts.baseUrl}${opts.sceneXml}`);
   if (opts.xmlTransform) xmlText = opts.xmlTransform(xmlText);
   FS.writeFile(`${workDir}/${opts.sceneXml}`, xmlText);
