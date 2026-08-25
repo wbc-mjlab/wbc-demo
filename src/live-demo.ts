@@ -51,13 +51,6 @@ function liveHref(params?: URLSearchParams): string {
   return q ? `${import.meta.env.BASE_URL}?${q}` : import.meta.env.BASE_URL;
 }
 
-function trackingHref(params?: URLSearchParams): string {
-  const q = params?.toString();
-  return q
-    ? `${import.meta.env.BASE_URL}tracking.html?${q}`
-    : `${import.meta.env.BASE_URL}tracking.html`;
-}
-
 function githubHref(links?: PolicyLinks): string {
   for (const url of [links?.code, links?.paper]) {
     if (url?.includes('github.com')) return url;
@@ -82,6 +75,24 @@ export function preferMinimalChrome(): boolean {
   return coarse || (narrow && touchPoints) || narrow;
 }
 
+const PAD_PREF_KEY = 'wbc-demo-pad';
+
+/** On-screen stick default: on for mobile, off for desktop; overridable via storage / ?pad=. */
+export function preferMobilePad(): boolean {
+  try {
+    const stored = localStorage.getItem(PAD_PREF_KEY);
+    if (stored === 'on') return true;
+    if (stored === 'off') return false;
+  } catch { /* ignore */ }
+  return preferMinimalChrome();
+}
+
+function savePadPref(on: boolean): void {
+  try {
+    localStorage.setItem(PAD_PREF_KEY, on ? 'on' : 'off');
+  } catch { /* ignore */ }
+}
+
 function renderMessage(root: HTMLElement, title: string, body: string): void {
   root.innerHTML = `
     <p class="back-link"><a href="${galleryHref()}">← All clips</a></p>
@@ -99,6 +110,7 @@ export function bootDemoPage(opts: DemoPageOptions): void {
   const id = params.get('id') ?? getDefaultLivePolicy()?.id;
   const startClip = params.get('clip') ?? undefined;
   const chromeParam = params.get('chrome');
+  const padParam = params.get('pad');
   const entry = id ? getPolicy(id) : undefined;
   if (!entry) {
     renderMessage(root, 'Policy not found',
@@ -128,7 +140,11 @@ export function bootDemoPage(opts: DemoPageOptions): void {
   let chrome: 'full' | 'minimal' =
     chromeParam === 'full' || chromeParam === 'minimal'
       ? chromeParam
-      : preferMinimalChrome() ? 'minimal' : 'full';
+      : 'minimal';
+  const padEnabled =
+    padParam === 'on' ? true
+      : padParam === 'off' ? false
+        : preferMobilePad();
 
   root.classList.remove('page');
   const ui = buildUi(root, {
@@ -136,6 +152,7 @@ export function bootDemoPage(opts: DemoPageOptions): void {
     repoUrl: githubHref(manifest.links),
     kind: opts.kind,
     chrome,
+    padEnabled,
     onChromeChange: (next) => { chrome = next; },
   });
 
@@ -175,17 +192,19 @@ interface BuildUiOpts {
   repoUrl: string;
   kind: DemoPageKind;
   chrome: 'full' | 'minimal';
+  padEnabled: boolean;
   onChromeChange: (chrome: 'full' | 'minimal') => void;
 }
 
 function buildUi(root: HTMLElement, opts: BuildUiOpts) {
   const tracking = opts.kind === 'tracking';
-  const modeLink = tracking
-    ? `<a class="live__mode-link" href="${liveHref(new URLSearchParams(window.location.search))}" title="Open generator demo">gen demo</a>`
-    : `<a class="live__mode-link" href="${trackingHref(new URLSearchParams(window.location.search))}" title="Open tracking / reference mode">tracking</a>`;
+  // Live page: in-page Gen ↔ tracking toggle. Tracking page: link out to Gen demo.
+  const modeControl = tracking
+    ? `<a class="live__mode-link" href="${liveHref(new URLSearchParams(window.location.search))}" title="Open generator demo">generator</a>`
+    : `<button type="button" id="lv-mode-toggle" class="live__btn live__btn--mode" title="Switch mode (G)" aria-pressed="false" disabled>generator</button>`;
 
   root.innerHTML = `
-    <div class="live" id="lv-root" data-state="boot" data-chrome="${opts.chrome}" data-kind="${opts.kind}">
+    <div class="live" id="lv-root" data-state="boot" data-chrome="${opts.chrome}" data-kind="${opts.kind}" data-hud="on">
       <div class="live__stage" id="lv-viewport"></div>
       <div class="live__vignette" aria-hidden="true"></div>
 
@@ -206,7 +225,6 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
           <button type="button" id="lv-next" class="live__btn live__btn--dense" title="Next clip (→)">▶</button>
           <button type="button" id="lv-getup" class="live__btn live__btn--dense" title="Get up from floor (↑)">get up</button>
           <button type="button" id="lv-liedown" class="live__btn live__btn--dense" title="Lie down when idle (↓)">lie down</button>
-          ${tracking ? '' : '<button type="button" id="lv-gen" class="live__btn" title="Generator locomotion (G)" aria-pressed="false" disabled>gen</button>'}
           <label class="live__select live__select--dense"><span>speed</span>
             <select id="lv-speed">
               <option value="0.25">0.25×</option>
@@ -227,7 +245,65 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
             <div class="live__more-body" id="lv-more-body"></div>
           </details>
           <button type="button" id="lv-chrome" class="live__btn live__btn--chrome" title="Toggle compact UI">compact</button>
-          ${modeLink}
+          ${tracking ? '' : '<button type="button" id="lv-pad-toggle" class="live__btn live__btn--pad" title="Toggle on-screen stick / run / crouch">pad</button>'}
+          ${modeControl}
+          <details class="live__keys" id="lv-keys">
+            <summary class="live__keys-toggle" id="lv-keys-summary" title="Controls help (?)">controls</summary>
+            <div class="live__keys-body">
+              <section class="live__keys-pane" id="lv-keys-general" aria-labelledby="lv-keys-general-title">
+                <h3 class="live__keys-heading" id="lv-keys-general-title">General</h3>
+                <table class="live__keys-table">
+                  <tbody>
+                    <tr data-keys-mode="clips"><th scope="row"><kbd>Space</kbd></th><td>Play / pause clip</td></tr>
+                    <tr data-keys-mode="gen"><th scope="row"><kbd>Space</kbd></th><td>Crouch style</td></tr>
+                    <tr><th scope="row"><kbd>R</kbd></th><td>Reset sim pose</td></tr>
+                    <tr><th scope="row"><kbd>F</kbd></th><td>Toggle camera follow</td></tr>
+                    <tr><th scope="row"><kbd>V</kbd></th><td>Toggle chase cam</td></tr>
+                    <tr><th scope="row"><kbd>P</kbd></th><td>Policy on / off</td></tr>
+                    <tr data-keys-mode="live"><th scope="row"><kbd>G</kbd></th><td>Toggle generator ↔ tracking</td></tr>
+                    <tr><th scope="row"><kbd>H</kbd></th><td>Hide / show HUD</td></tr>
+                    <tr><th scope="row"><kbd>?</kbd></th><td>Show / hide this menu</td></tr>
+                    <tr><th scope="row">Drag</th><td>Perturb robot</td></tr>
+                  </tbody>
+                </table>
+              </section>
+
+              <section class="live__keys-pane live__keys-pane--clips" id="lv-keys-clips" aria-labelledby="lv-keys-clips-title">
+                <h3 class="live__keys-heading" id="lv-keys-clips-title">Tracking</h3>
+                <p class="live__keys-note">Policy tracks the selected reference trajectory.</p>
+                <table class="live__keys-table">
+                  <tbody>
+                    <tr><th scope="row"><kbd>←</kbd> <kbd>→</kbd></th><td>Previous / next clip</td></tr>
+                    <tr><th scope="row"><kbd>↑</kbd></th><td>Get up (when down)</td></tr>
+                    <tr><th scope="row"><kbd>↓</kbd></th><td>Lie down (when idle)</td></tr>
+                    <tr><th scope="row">Loop</th><td>Repeat clip when finished</td></tr>
+                    <tr><th scope="row">Trajectory</th><td>Pick a clip from the dropdown</td></tr>
+                  </tbody>
+                </table>
+              </section>
+
+              ${tracking ? '' : `
+              <section class="live__keys-pane live__keys-pane--gen" id="lv-keys-gen" aria-labelledby="lv-keys-gen-title" hidden>
+                <h3 class="live__keys-heading" id="lv-keys-gen-title">
+                  Generator
+                  <span class="live__keys-badge" id="lv-keys-gen-badge">off</span>
+                </h3>
+                <p class="live__keys-note">Locomotion from the generator. Use keys or the on-screen <strong>pad</strong> on touch.</p>
+                <table class="live__keys-table">
+                  <tbody>
+                    <tr><th scope="row"><kbd>W</kbd> <kbd>S</kbd></th><td>Forward / back</td></tr>
+                    <tr><th scope="row"><kbd>Q</kbd> <kbd>E</kbd></th><td>Strafe left / right</td></tr>
+                    <tr><th scope="row"><kbd>A</kbd> <kbd>D</kbd></th><td>Yaw left / right</td></tr>
+                    <tr><th scope="row"><kbd>Shift</kbd></th><td>Run style</td></tr>
+                    <tr><th scope="row"><kbd>Space</kbd></th><td>Crouch style</td></tr>
+                    <tr><th scope="row"><kbd>↓</kbd></th><td>Sit</td></tr>
+                    <tr><th scope="row"><kbd>↑</kbd></th><td>Return to walk / run / crouch</td></tr>
+                    <tr><th scope="row">Pad</th><td>On-screen stick · run · crouch</td></tr>
+                  </tbody>
+                </table>
+              </section>`}
+            </div>
+          </details>
         </div>
       </header>
 
@@ -240,63 +316,10 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
         <div class="live__pad-actions">
           <button type="button" class="live__pad-btn" id="lv-yaw-l" aria-label="Turn left">⟲</button>
           <button type="button" class="live__pad-btn" id="lv-yaw-r" aria-label="Turn right">⟳</button>
-          <button type="button" class="live__pad-btn live__pad-btn--sprint" id="lv-sprint">shift</button>
+          <button type="button" class="live__pad-btn live__pad-btn--sprint" id="lv-sprint">run</button>
           <button type="button" class="live__pad-btn live__pad-btn--crouch" id="lv-crouch">crouch</button>
         </div>
       </div>
-
-      <details class="live__keys" id="lv-keys">
-        <summary class="live__keys-toggle">controls</summary>
-        <div class="live__keys-body">
-          <section class="live__keys-pane" aria-labelledby="lv-keys-general">
-            <h3 class="live__keys-heading" id="lv-keys-general">General</h3>
-            <table class="live__keys-table">
-              <tbody>
-                <tr><th scope="row"><kbd>Space</kbd></th><td>Play / pause clip (crouch in Gen)</td></tr>
-                <tr><th scope="row"><kbd>R</kbd></th><td>Reset sim pose</td></tr>
-                <tr><th scope="row"><kbd>F</kbd></th><td>Toggle camera follow</td></tr>
-                <tr><th scope="row"><kbd>V</kbd></th><td>Toggle chase cam</td></tr>
-                <tr><th scope="row"><kbd>P</kbd></th><td>Policy on / off</td></tr>
-                <tr><th scope="row"><kbd>?</kbd></th><td>Show / hide this panel</td></tr>
-                <tr><th scope="row">Drag</th><td>Perturb robot</td></tr>
-              </tbody>
-            </table>
-          </section>
-
-          <section class="live__keys-pane" aria-labelledby="lv-keys-clips">
-            <h3 class="live__keys-heading" id="lv-keys-clips">Clips / tracking</h3>
-            <table class="live__keys-table">
-              <tbody>
-                <tr><th scope="row"><kbd>←</kbd> <kbd>→</kbd></th><td>Previous / next clip</td></tr>
-                <tr><th scope="row"><kbd>↑</kbd></th><td>Get up (when down)</td></tr>
-                <tr><th scope="row"><kbd>↓</kbd></th><td>Lie down (when idle)</td></tr>
-                <tr><th scope="row">Loop</th><td>Repeat clip when finished</td></tr>
-              </tbody>
-            </table>
-          </section>
-
-          ${tracking ? '' : `
-          <section class="live__keys-pane live__keys-pane--gen" id="lv-keys-gen" aria-labelledby="lv-keys-gen-title">
-            <h3 class="live__keys-heading" id="lv-keys-gen-title">
-              Generator
-              <span class="live__keys-badge" id="lv-keys-gen-badge">off</span>
-            </h3>
-            <p class="live__keys-note">Generator starts on by default. Press <kbd>G</kbd> or <strong>clips</strong> to leave. On touch devices use the on-screen stick.</p>
-            <table class="live__keys-table">
-              <tbody>
-                <tr><th scope="row"><kbd>G</kbd></th><td>Toggle Gen ↔ clips</td></tr>
-                <tr><th scope="row"><kbd>W</kbd> <kbd>S</kbd></th><td>Forward / back</td></tr>
-                <tr><th scope="row"><kbd>Q</kbd> <kbd>E</kbd></th><td>Strafe left / right</td></tr>
-                <tr><th scope="row"><kbd>A</kbd> <kbd>D</kbd></th><td>Yaw left / right</td></tr>
-                <tr><th scope="row"><kbd>Shift</kbd></th><td>Sprint / run style</td></tr>
-                <tr><th scope="row"><kbd>Space</kbd></th><td>Crouch style</td></tr>
-                <tr><th scope="row"><kbd>↓</kbd></th><td>Sit</td></tr>
-                <tr><th scope="row"><kbd>↑</kbd></th><td>Return to walk / run / crouch</td></tr>
-              </tbody>
-            </table>
-          </section>`}
-        </div>
-      </details>
 
       <footer class="live__telemetry" id="lv-metrics"></footer>
       <div class="live__progress" aria-hidden="true"><span id="lv-progress"></span></div>
@@ -314,7 +337,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
   const nextEl = $<HTMLButtonElement>('#lv-next');
   const getupEl = $<HTMLButtonElement>('#lv-getup');
   const liedownEl = $<HTMLButtonElement>('#lv-liedown');
-  const genEl = tracking ? null : $<HTMLButtonElement>('#lv-gen');
+  const genEl = tracking ? null : $<HTMLButtonElement>('#lv-mode-toggle');
   const speedEl = $<HTMLSelectElement>('#lv-speed');
   const modeEl = $<HTMLButtonElement>('#lv-mode');
   const pushEl = $<HTMLButtonElement>('#lv-push');
@@ -324,9 +347,12 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
   const playEl = $<HTMLButtonElement>('#lv-play');
   const resetEl = $<HTMLButtonElement>('#lv-reset');
   const chromeEl = $<HTMLButtonElement>('#lv-chrome');
+  const padToggleEl = tracking ? null : $<HTMLButtonElement>('#lv-pad-toggle');
   const moreEl = $<HTMLDetailsElement>('#lv-more');
   const moreBody = $<HTMLElement>('#lv-more-body');
   const keysEl = $<HTMLDetailsElement>('#lv-keys');
+  const keysSummaryEl = $<HTMLElement>('#lv-keys-summary');
+  const clipsPaneEl = $<HTMLElement>('#lv-keys-clips');
   const genPaneEl = tracking ? null : $<HTMLElement>('#lv-keys-gen');
   const genBadgeEl = tracking ? null : $<HTMLElement>('#lv-keys-gen-badge');
   const padEl = $<HTMLElement>('#lv-pad');
@@ -363,6 +389,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
   let mode: EngineMode = 'policy';
   let refSource: RefSource = tracking ? 'clips' : 'clips';
   let chrome: 'full' | 'minimal' = opts.chrome;
+  let padEnabled = opts.padEnabled;
   let notifyTeleop: (() => void) | undefined;
 
   const pad = {
@@ -383,12 +410,29 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
     syncPadVisibility();
   }
 
+  function setPadEnabled(on: boolean): void {
+    padEnabled = on;
+    savePadPref(on);
+    if (padToggleEl) {
+      padToggleEl.setAttribute('aria-pressed', String(on));
+      padToggleEl.textContent = on ? 'pad on' : 'pad';
+      padToggleEl.title = on
+        ? 'Hide on-screen stick / run / crouch'
+        : 'Show on-screen stick / run / crouch';
+    }
+    syncPadVisibility();
+  }
+
   function syncPadVisibility(): void {
-    const show = !tracking && refSource === 'gen' && (chrome === 'minimal' || preferMinimalChrome());
+    const show = !tracking && padEnabled && refSource === 'gen';
     const wasShown = !padEl.hidden;
     padEl.hidden = !show;
     padEl.setAttribute('aria-hidden', String(!show));
     rootEl.dataset.pad = show ? 'on' : 'off';
+    if (padToggleEl) {
+      // Toggle stays available once Gen assets exist; stick only draws while Gen is active.
+      padToggleEl.disabled = latest != null && latest.genAvailable === false;
+    }
     if (!show && wasShown) {
       pad.forward = 0;
       pad.strafe = 0;
@@ -417,25 +461,57 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
     stateEl.textContent = label;
   }
 
+  function syncKeysHelp(): void {
+    const genOn = !tracking && refSource === 'gen';
+    rootEl.dataset.ref = genOn ? 'gen' : 'clips';
+    keysSummaryEl.textContent = 'controls';
+    clipsPaneEl.hidden = genOn;
+    if (genPaneEl) {
+      genPaneEl.hidden = !genOn;
+      genPaneEl.dataset.active = genOn ? 'true' : 'false';
+    }
+    for (const row of rootEl.querySelectorAll<HTMLElement>('[data-keys-mode]')) {
+      const m = row.dataset.keysMode;
+      if (m === 'gen') row.hidden = !genOn;
+      else if (m === 'clips') row.hidden = genOn;
+      else if (m === 'live') row.hidden = tracking;
+    }
+  }
+
   function syncGenButton(): void {
-    if (!genEl) return;
+    if (!genEl) {
+      syncKeysHelp();
+      syncPadVisibility();
+      return;
+    }
     const avail = latest?.genAvailable === true;
     const down = latest != null && !latest.robotIsUp;
     genEl.disabled = !avail || (down && refSource !== 'gen');
     genEl.setAttribute('aria-pressed', String(refSource === 'gen'));
     genEl.classList.toggle('live__btn--warn', refSource === 'gen');
-    genEl.textContent = refSource === 'gen' ? 'clips' : 'gen';
+    // Label is the mode you switch *to*.
+    genEl.textContent = refSource === 'gen' ? 'tracking' : 'generator';
     genEl.title = refSource === 'gen'
-      ? 'Leave Generator → clips (G)'
-      : 'Enter Generator locomotion (G)';
+      ? 'Switch to tracking / clips (G)'
+      : 'Switch to generator locomotion (G)';
 
     const genOn = refSource === 'gen';
-    if (genPaneEl) genPaneEl.dataset.active = genOn ? 'true' : 'false';
     if (genBadgeEl) {
       genBadgeEl.textContent = !avail ? 'n/a' : genOn ? 'on' : 'off';
       genBadgeEl.dataset.tone = !avail ? 'muted' : genOn ? 'on' : 'off';
     }
+    syncKeysHelp();
     syncPadVisibility();
+  }
+
+  let hudVisible = true;
+  function setHudVisible(on: boolean): void {
+    hudVisible = on;
+    rootEl.dataset.hud = on ? 'on' : 'off';
+    if (!on) {
+      keysEl.open = false;
+      moreEl.open = false;
+    }
   }
 
   chromeEl.textContent = chrome === 'minimal' ? 'full UI' : 'compact';
@@ -443,6 +519,18 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
   chromeEl.addEventListener('click', () => {
     setChrome(chrome === 'minimal' ? 'full' : 'minimal');
   });
+  if (padToggleEl) {
+    setPadEnabled(padEnabled);
+    padToggleEl.addEventListener('click', () => setPadEnabled(!padEnabled));
+  }
+  // One topbar dropdown open at a time.
+  keysEl.addEventListener('toggle', () => {
+    if (keysEl.open) moreEl.open = false;
+  });
+  moreEl.addEventListener('toggle', () => {
+    if (moreEl.open) keysEl.open = false;
+  });
+  syncKeysHelp();
 
   return {
     viewport,
@@ -704,6 +792,10 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
             chasing = h.toggleChase();
             if (chasing) following = true;
             syncChaseButton();
+            break;
+          case 'KeyH':
+            e.preventDefault();
+            setHudVisible(!hudVisible);
             break;
           case 'KeyP':
             e.preventDefault();

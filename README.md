@@ -13,15 +13,17 @@ static site to **GitHub Pages**.
   Scroll to bring more to life; click one to open **tracking** mode on that clip.
 - **Live / Gen demo** (`/`) — full-screen viewport. **Generator starts on by
   default** when Gen assets are present (W/S move, Q/E strafe, A/D turn, Shift
-  sprint, Space crouch). On phones/tablets a **compact HUD** is the default
-  (trajectory dropdown + on-screen stick / shift / crouch). Press **G** (or
-  **clips**) for in-page clip tracking, or open the dedicated tracking URL.
-  Same Arc→WBC path as
+  sprint, Space crouch). **Compact HUD** is the default (trajectory dropdown +
+  essentials); use **full UI** or `?chrome=full` for the dense bar. On touch,
+  enable the on-screen stick with **pad**. Press **G** (or **clips**) for
+  in-page clip tracking, or open the dedicated tracking URL. Same Arc→WBC path as
   [wbc-g1-deploy](https://github.com/wbc-mjlab/wbc-g1-deploy)
   `wbc_reference_node` Gen mode (`policies/<id>/gen/params/`).
 - **Tracking page** (`/tracking.html`) — shareable **reference / clip tracking**
   only (Generator off). Same query params: `?id=<policy>&clip=<clip>`.
-  Force HUD with `?chrome=minimal` or `?chrome=full`.
+  Force HUD with `?chrome=minimal` or `?chrome=full`. Toggle the on-screen
+  stick with the **pad** button (or `?pad=on` / `?pad=off`; preference is saved).
+  The controls help panel switches with Gen vs tracking mode.
 - **Deploy-aligned clip UX** — browsable clips come from
   `policies/<id>/reference/manifest.yaml` (same idea as
   [wbc-g1-deploy](https://github.com/wbc-mjlab/wbc-g1-deploy) `config/clips/manifest.yaml`).
