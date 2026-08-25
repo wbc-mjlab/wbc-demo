@@ -641,13 +641,22 @@
   bottom: 1rem;
 }
 
-/* Mode toggle while full HUD is hidden (H) — top left */
-.live__mode-mini {
+/* Compact HUD cluster while full chrome is hidden (H) — top right */
+.live__hud-mini {
   display: none;
   position: absolute;
   top: 0.75rem;
-  left: 0.75rem;
+  right: 0.75rem;
   z-index: 4;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4rem;
+  max-width: calc(100vw - 1.5rem);
+}
+.live[data-hud="off"] .live__hud-mini {
+  display: flex;
+}
+.live__mode-mini {
   font-size: 0.78rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -656,17 +665,10 @@
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
   backdrop-filter: blur(14px) saturate(1.2);
 }
-.live[data-hud="off"] .live__mode-mini {
-  display: inline-flex;
-}
 
-/* Compact clip strip when full HUD is hidden (H) */
+/* Compact clip strip (under mode toggle when both are shown) */
 .live__minibar {
   display: none;
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  z-index: 4;
   align-items: center;
   gap: 0.4rem;
   padding: 0.4rem 0.45rem;
@@ -675,7 +677,14 @@
   background: var(--hud-bg);
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
   backdrop-filter: blur(14px) saturate(1.2);
-  max-width: calc(100vw - 1.5rem);
+  max-width: 100%;
+}
+/* Tracking-only page: minibar is not wrapped — keep top-right placement. */
+.live[data-kind="tracking"] .live__minibar {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 4;
 }
 .live[data-hud="off"][data-ref="clips"] .live__minibar {
   display: flex;

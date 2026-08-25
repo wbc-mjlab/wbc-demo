@@ -347,8 +347,20 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
         </div>
       </div>
 
-      ${tracking ? '' : '<button type="button" id="lv-mode-mini" class="live__mode-mini live__btn live__btn--mode" title="Switch mode (G)" aria-pressed="false" disabled>generator</button>'}
-
+      ${tracking ? '' : `
+      <div class="live__hud-mini" id="lv-hud-mini">
+        <button type="button" id="lv-mode-mini" class="live__mode-mini live__btn live__btn--mode" title="Switch mode (G)" aria-pressed="false" disabled>generator</button>
+        <div class="live__minibar" id="lv-minibar" aria-label="Compact clip controls">
+          <label class="live__select live__select--clip live__minibar-clip">
+            <span class="live__minibar-label">trajectory</span>
+            <select id="lv-clip-mini"></select>
+          </label>
+          <button type="button" id="lv-mini-play" class="live__btn live__btn--icon" title="Play">▶</button>
+          <button type="button" id="lv-mini-pause" class="live__btn live__btn--icon" title="Pause">⏸</button>
+          <button type="button" id="lv-mini-loop" class="live__btn live__btn--icon" title="Loop" aria-pressed="false">↻</button>
+        </div>
+      </div>`}
+      ${tracking ? `
       <div class="live__minibar" id="lv-minibar" aria-label="Compact clip controls">
         <label class="live__select live__select--clip live__minibar-clip">
           <span class="live__minibar-label">trajectory</span>
@@ -357,7 +369,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
         <button type="button" id="lv-mini-play" class="live__btn live__btn--icon" title="Play">▶</button>
         <button type="button" id="lv-mini-pause" class="live__btn live__btn--icon" title="Pause">⏸</button>
         <button type="button" id="lv-mini-loop" class="live__btn live__btn--icon" title="Loop" aria-pressed="false">↻</button>
-      </div>
+      </div>` : ''}
 
       <footer class="live__telemetry" id="lv-metrics"></footer>
       <div class="live__progress" aria-hidden="true"><span id="lv-progress"></span></div>
