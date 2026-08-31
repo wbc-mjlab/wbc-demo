@@ -28,6 +28,13 @@ export interface GenCommandTermCfg {
   featuresPerHorizon?: number;
   styleNames?: string[];
   styleHeightRanges?: Record<string, [number, number]>;
+  /**
+   * Per-style height command, measured from the training motion library.
+   * Prefer this over the midpoint of `styleHeightRanges`: the `sit` envelope
+   * spans standing-to-floor because the sitting clips include start/stop
+   * transitions, so its midpoint is not a seated pose.
+   */
+  styleHeightDeploy?: Record<string, number>;
 }
 
 export interface GenCommandCfg {
@@ -37,6 +44,8 @@ export interface GenCommandCfg {
   positionScale: number;
   heightScale: number;
   heightLowpassTau: number;
+  /** Low-pass time constant for teleop ``[vx, vy, wz]`` before waypoints. */
+  commandSmoothingTau: number;
   /** Derived convenience for teleop (0 = no setpoint term). */
   heightSetpointDim: number;
   /** Derived convenience for teleop (0 = no per-horizon height). */
@@ -45,6 +54,7 @@ export interface GenCommandCfg {
   styleDim: number;
   styleNames: string[];
   styleHeightRanges: Record<string, [number, number]>;
+  styleHeightDeploy: Record<string, number>;
 }
 
 export interface GenModelCfg {
@@ -131,6 +141,15 @@ function parseCommandTerm(
     }
     cfg.styleHeightRanges = ranges;
   }
+  if (term.style_height_deploy && typeof term.style_height_deploy === 'object') {
+    const deploy: Record<string, number> = {};
+    for (const [k, v] of Object.entries(
+      term.style_height_deploy as Record<string, unknown>,
+    )) {
+      deploy[k] = Number(v);
+    }
+    cfg.styleHeightDeploy = deploy;
+  }
   return cfg;
 }
 
@@ -170,11 +189,13 @@ function parseModularCommand(cmd: Record<string, unknown>): GenCommandCfg {
     positionScale: xy?.positionScale ?? 1,
     heightScale: hSet?.heightScale ?? hWp?.heightScale ?? 1,
     heightLowpassTau: hWp?.heightLowpassTau ?? 0,
+    commandSmoothingTau: Number(cmd.command_smoothing_tau ?? 0.1),
     heightSetpointDim: hSet?.flatWidth ?? hSet?.heightSetpointDim ?? 0,
     heightFeaturesPerHorizon: hWp != null ? (hWp.featuresPerHorizon ?? 1) : 0,
     styleDim,
     styleNames,
     styleHeightRanges: style?.styleHeightRanges ?? {},
+    styleHeightDeploy: style?.styleHeightDeploy ?? {},
   };
 }
 

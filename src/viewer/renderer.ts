@@ -8,7 +8,6 @@
  */
 
 import {
-  ACESFilmicToneMapping,
   AmbientLight,
   Box3,
   BoxGeometry,
@@ -21,11 +20,11 @@ import {
   HemisphereLight,
   Mesh,
   MeshStandardMaterial,
+  NoToneMapping,
   Object3D,
   PCFSoftShadowMap,
   PerspectiveCamera,
   PlaneGeometry,
-  PMREMGenerator,
   RepeatWrapping,
   Scene,
   SRGBColorSpace,
@@ -34,7 +33,23 @@ import {
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+
+/**
+ * G1 MJCF lighting (`scene_g1.xml` + MuJoCo defaults), mapped the same way as
+ * mjswan (`intensity = max(diffuse) * π` so Three's π BRDF cancels).
+ *
+ * Directional: pos="1 0 3.5" dir="0 0 -1" → Y-up (1, 3.5, 0) / (0, -1, 0);
+ * defaults diffuse 0.7 / specular 0.3 / ambient 0.
+ * Headlight: diffuse 0.6 / ambient 0.1 / specular 0.9.
+ *
+ * Colors are then tinted toward CSS viewport/floor tokens so the robot sits in
+ * the branded teal scene instead of a neutral MuJoCo studio.
+ */
+const MJ_DIR_DIFFUSE = 0.7;
+const MJ_HEAD_DIFFUSE = 0.6;
+const MJ_HEAD_AMBIENT = 0.1;
+/** Directional light standoff along -dir (mjswan uses light_range, default 10). */
+const MJ_DIR_STANDOFF = 10;
 
 /** Read a CSS custom property (design token) off :root, with a fallback. */
 function token(name: string, fallback: string): string {
@@ -87,7 +102,7 @@ export interface ViewerOptions {
   robotUrl?: string;
   /**
    * Trim cost for many simultaneous viewports (gallery cards): cap pixel ratio
-   * at 1 and skip the PMREM image-based-lighting pass (3-point lights only).
+   * at 1 and disable shadows.
    */
   lowQuality?: boolean;
 }
@@ -116,6 +131,13 @@ export class Viewer {
   private readonly shadowsEnabled: boolean;
   private rafId = 0;
   private disposed = false;
+  /** MuJoCo headlight — follows the camera each frame (mjswan `updateHeadlightFromCamera`). */
+  private headlight: DirectionalLight | null = null;
+  private readonly headlightDir = new Vector3();
+  private ambient: AmbientLight | null = null;
+  private keyLight: DirectionalLight | null = null;
+  /** Cool sky + floor-tinted ground bounce — ties robot to the branded ground. */
+  private bounce: HemisphereLight | null = null;
   /** Visual ground plane — snapped under the camera so it never runs out. */
   private floor: Mesh | null = null;
   private grid: GridHelper | null = null;
@@ -132,8 +154,10 @@ export class Viewer {
     this.scene = new Scene();
     const bg = new Color(token('--color-viewport-bg', '#16283a'));
     this.scene.background = bg;
-    // Soft depth falloff — far enough that the re-centered ground never shows an edge.
-    this.scene.fog = new Fog(bg, 28, 70);
+    const lightTheme =
+      0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b > 0.45;
+    // Light depth haze — farther on light theme so pale fog doesn't milk the robot.
+    this.scene.fog = new Fog(bg, lightTheme ? 48 : 42, lightTheme ? 110 : 95);
 
     const { clientWidth: w, clientHeight: h } = this.sizedContainer();
     this.camera = new PerspectiveCamera(50, w / h, 0.01, 200);
@@ -144,8 +168,9 @@ export class Viewer {
       options.lowQuality ? 1 : Math.min(window.devicePixelRatio, 2),
     );
     this.renderer.setSize(w, h);
-    this.renderer.toneMapping = ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.95;
+    // Flat MuJoCo response (no ACES). sRGB output keeps CSS theme colors correct.
+    this.renderer.outputColorSpace = SRGBColorSpace;
+    this.renderer.toneMapping = NoToneMapping;
     if (this.shadowsEnabled) {
       this.renderer.shadowMap.enabled = true;
       this.renderer.shadowMap.type = PCFSoftShadowMap;
@@ -156,7 +181,6 @@ export class Viewer {
     this.controls.enableDamping = true;
     this.controls.target.set(0, 0.8, 0);
 
-    if (!options.lowQuality) this.addEnvironment();
     this.addLights();
     this.addGround(this.shadowsEnabled);
 
@@ -178,47 +202,118 @@ export class Viewer {
     };
   }
 
-  /** Soft IBL — blurred room bounce, low intensity for natural matte surfaces. */
-  private addEnvironment(): void {
-    const pmrem = new PMREMGenerator(this.renderer);
-    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.1).texture;
-    this.scene.environmentIntensity = 0.1;
-    pmrem.dispose();
-  }
-
-  /** Soft natural daylight: sky dome + gentle sun + generous bounce fill. */
+  /**
+   * MuJoCo light layout (overhead key + camera headlight + ambient), tinted
+   * toward CSS viewport/floor tokens so the robot matches the teal scene.
+   */
   private addLights(): void {
-    // Broad sky/ground bounce — softens contrast like overcast / late-morning light.
-    this.scene.add(new HemisphereLight(0xc5d6ea, 0x4a4540, 0.48));
-    // Lift deep shadow wells without flattening form.
-    this.scene.add(new AmbientLight(0x9aabbb, 0.12));
+    this.ambient = new AmbientLight(0xffffff, MJ_HEAD_AMBIENT * Math.PI * 0.45);
+    this.scene.add(this.ambient);
 
-    const sun = new DirectionalLight(0xfff1e4, 0.55);
-    sun.position.set(4, 11, 5);
+    // Cool sky / warm-floor hemisphere — soft bounce without flattening form.
+    this.bounce = new HemisphereLight(0xffffff, 0xffffff, 0.28);
+    this.scene.add(this.bounce);
+
+    // Overhead directional from MJCF (Y-up). Target at light pos; source along -dir.
+    const aim = new Vector3(1, 3.5, 0);
+    const dir = new Vector3(0, -1, 0);
+    const sun = new DirectionalLight(0xffffff, MJ_DIR_DIFFUSE * Math.PI);
+    sun.position.copy(aim).addScaledVector(dir, -MJ_DIR_STANDOFF);
+    sun.target.position.copy(aim);
+    this.scene.add(sun.target);
     if (this.shadowsEnabled) {
       sun.castShadow = true;
       sun.shadow.mapSize.set(1024, 1024);
-      sun.shadow.camera.near = 0.5;
-      sun.shadow.camera.far = 14;
+      sun.shadow.camera.near = 1;
+      sun.shadow.camera.far = MJ_DIR_STANDOFF + 4;
       const extent = 4.5;
       sun.shadow.camera.left = -extent;
       sun.shadow.camera.right = extent;
       sun.shadow.camera.top = extent;
       sun.shadow.camera.bottom = -extent;
       sun.shadow.bias = -0.0002;
-      sun.shadow.normalBias = 0.03;
-      sun.shadow.radius = 5.5;
+      sun.shadow.normalBias = 0.02;
+      sun.shadow.radius = 1.5;
     }
     this.scene.add(sun);
+    this.keyLight = sun;
 
-    // Cool sky fill + warm ground bounce — softens the lit/shadow edge.
-    const fill = new DirectionalLight(0xd0e0f2, 0.28);
-    fill.position.set(-5, 5, -3);
-    this.scene.add(fill);
+    const head = new DirectionalLight(0xffffff, MJ_HEAD_DIFFUSE * Math.PI * 0.4);
+    head.castShadow = false;
+    this.scene.add(head.target);
+    this.scene.add(head);
+    this.headlight = head;
 
-    const bounce = new DirectionalLight(0xe8dcc8, 0.1);
-    bounce.position.set(1, 1.5, -4);
-    this.scene.add(bounce);
+    this.applyEnvLightTints();
+    this.updateHeadlight();
+  }
+
+  /**
+   * Pull light colors + intensities from design tokens. Dark and light themes
+   * need different tint strengths: pale floor/bg hexes wash the robot if we
+   * reuse the dark-theme lerp amounts — but light still needs enough intensity
+   * so the robot doesn't look underexposed against a bright viewport.
+   */
+  private applyEnvLightTints(): void {
+    const bg = new Color(token('--color-viewport-bg', '#16283a'));
+    const floor = new Color(token('--color-floor', '#2a455c'));
+    const grid = new Color(token('--color-grid-minor', '#2f7a8a'));
+    const major = new Color(token('--color-grid-major', '#429eb0'));
+    // Hex → Color is linear; luma > ~0.45 ≈ light viewport (#d5e2ee).
+    const lightTheme =
+      0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b > 0.45;
+
+    if (this.ambient) {
+      if (lightTheme) {
+        this.ambient.color.set(0xffffff).lerp(grid, 0.12);
+        this.ambient.intensity = MJ_HEAD_AMBIENT * Math.PI * 0.55;
+      } else {
+        this.ambient.color.set(0xffffff).lerp(bg, 0.35);
+        this.ambient.intensity = MJ_HEAD_AMBIENT * Math.PI * 0.45;
+      }
+    }
+
+    if (this.keyLight) {
+      if (lightTheme) {
+        // Brighter daylight key — pale scene needs more irradiance on the robot.
+        this.keyLight.color.set(0xfffaf6);
+        this.keyLight.intensity = MJ_DIR_DIFFUSE * Math.PI * 1.15;
+      } else {
+        this.keyLight.color.set(0xfff6ec);
+        this.keyLight.intensity = MJ_DIR_DIFFUSE * Math.PI;
+      }
+    }
+
+    if (this.headlight) {
+      if (lightTheme) {
+        this.headlight.color.set(0xffffff).lerp(major, 0.15);
+        this.headlight.intensity = MJ_HEAD_DIFFUSE * Math.PI * 0.45;
+      } else {
+        this.headlight.color.set(0xffffff).lerp(grid, 0.45);
+        this.headlight.intensity = MJ_HEAD_DIFFUSE * Math.PI * 0.4;
+      }
+    }
+
+    if (this.bounce) {
+      if (lightTheme) {
+        this.bounce.color.set(0xf7fafc).lerp(major, 0.08);
+        this.bounce.groundColor.copy(floor).lerp(new Color(0xe8dcc8), 0.2);
+        this.bounce.intensity = 0.32;
+      } else {
+        this.bounce.color.copy(bg).lerp(new Color(0xc5d6ea), 0.55);
+        this.bounce.groundColor.copy(floor).lerp(new Color(0xe8dcc8), 0.15);
+        this.bounce.intensity = 0.28;
+      }
+    }
+  }
+
+  /** Keep the MuJoCo headlight locked to the camera look direction. */
+  private updateHeadlight(): void {
+    if (!this.headlight) return;
+    this.camera.getWorldDirection(this.headlightDir);
+    this.headlight.position.copy(this.camera.position);
+    this.headlight.target.position.copy(this.camera.position).add(this.headlightDir);
+    this.headlight.target.updateMatrixWorld();
   }
 
   private addGround(receiveShadow: boolean): void {
@@ -243,7 +338,6 @@ export class Viewer {
         color: new Color(0xffffff),
         roughness: 0.96,
         metalness: 0,
-        envMapIntensity: 0.02,
       }),
     );
     floor.rotation.x = -Math.PI / 2;
@@ -275,10 +369,17 @@ export class Viewer {
   applyThemeColors(): void {
     const bg = new Color(token('--color-viewport-bg', '#16283a'));
     this.scene.background = bg;
+    const lightTheme =
+      0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b > 0.45;
+    // Light theme: push fog out so pale haze doesn't milk the robot.
+    const fogNear = lightTheme ? 48 : 42;
+    const fogFar = lightTheme ? 110 : 95;
     if (this.scene.fog instanceof Fog) {
       this.scene.fog.color.copy(bg);
+      this.scene.fog.near = fogNear;
+      this.scene.fog.far = fogFar;
     } else {
-      this.scene.fog = new Fog(bg, 28, 70);
+      this.scene.fog = new Fog(bg, fogNear, fogFar);
     }
 
     const floorColor = token('--color-floor', '#2a455c');
@@ -315,6 +416,8 @@ export class Viewer {
         (mats[0] as { color: Color }).color.set(minor);
       }
     }
+
+    this.applyEnvLightTints();
 
     const placeholder = this.robotRoot.getObjectByName('placeholder-robot');
     if (placeholder instanceof Mesh) {
@@ -409,6 +512,7 @@ export class Viewer {
     if (this.disposed) return;
     this.rafId = requestAnimationFrame(this.animate);
     this.controls.update();
+    this.updateHeadlight();
     this.snapGround();
     this.renderer.render(this.scene, this.camera);
   };

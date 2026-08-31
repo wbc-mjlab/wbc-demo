@@ -66,10 +66,11 @@ command:
       scale: [1.0, 1.0, 1.0, 1.0]
       style_names: [stand_walk, crouch, run, sit]
       style_height_ranges:
-        stand_walk: &id001 [0.65, 0.85]
-        crouch: &id002 [0.35, 0.55]
-        run: &id003 [0.7, 0.9]
-        sit: &id004 [0.25, 0.45]
+        stand_walk: &id001 [0.78, 0.83]
+        crouch: &id002 [0.36, 0.73]
+        run: &id003 [0.71, 0.83]
+        sit: &id004 [0.1, 0.84]
+      style_height_deploy: {stand_walk: 0.82, crouch: 0.62, run: 0.8, sit: 0.14}
     cmd_xy_waypoints:
       training_name: cmd_xy_waypoints
       deploy_name: cmd_xy_waypoints
@@ -77,8 +78,8 @@ command:
       flat_width: 6
       history_length: 0
       scale: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-      horizons: [15, 30, 60]
-      position_scale: 3.6
+      horizons: [15, 30, 45]
+      position_scale: 1.35
       features_per_horizon: 2
     cmd_height_setpoint:
       training_name: cmd_height_setpoint
@@ -96,14 +97,15 @@ command:
       flat_width: 6
       history_length: 0
       scale: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-      horizons: [15, 30, 60]
+      horizons: [15, 30, 45]
       features_per_horizon: 2
-  horizons: [15, 30, 60]
+  horizons: [15, 30, 45]
   command_style: styled_waypoints
   height_as_setpoint: true
   include_link_height: true
   height_lowpass_tau: 0.0
-  position_scale: 3.6
+  command_smoothing_tau: 0.1
+  position_scale: 1.35
   height_scale: 1.0
   style_names: [stand_walk, crouch, run, sit]
   style_height_ranges:
@@ -111,6 +113,7 @@ command:
     crouch: *id002
     run: *id003
     sit: *id004
+  style_height_deploy: {stand_walk: 0.82, crouch: 0.62, run: 0.8, sit: 0.14}
 outputs:
   field_order: [ref_base_height, ref_base_lin_vel_b, ref_base_ang_vel_b, ref_gravity_b,
     ref_joint_pos]
@@ -121,7 +124,7 @@ dims: {input_dim: 657, state_dim: 640, command_dim: 17, output_dim: 39}
 model: {type: cascade_ae, onnx_file: generator.onnx, onnx_input_name: obs, onnx_output_name: reference,
   intent_dim: 10, refine: true, use_ae: true, latent_dim: 256}
 play_vel_ranges:
-  lin_vel_x: [-1.5, 5.0]
+  lin_vel_x: [-1.5, 4.0]
   lin_vel_y: [-1.0, 1.0]
-  ang_vel_z: [-4.0, 4.0]
-  height: [0.1, 0.85]
+  ang_vel_z: [-3.0, 3.0]
+  height: [0.25, 0.85]

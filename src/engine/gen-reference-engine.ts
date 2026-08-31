@@ -24,8 +24,11 @@ export interface GenReferenceEngine {
   styleIndex(): number;
   hasStyle(): boolean;
   historyReady(): boolean;
+  isFallen(): boolean;
+  fallenHold(): number;
   /** One Gen step → Arc length `outputDim` (39). */
   step(vx: number, vy: number, wz: number): Promise<Float32Array>;
+
   dispose(): Promise<void>;
 }
 
@@ -73,6 +76,12 @@ export async function createGenReferenceEngine(
     },
     historyReady() {
       return obs.isHistoryReady();
+    },
+    isFallen() {
+      return obs.isFallen();
+    },
+    fallenHold() {
+      return obs.getFallenHold();
     },
     async step(vx, vy, wz) {
       if (!obs.isHistoryReady()) throw new Error('Gen history not ready');

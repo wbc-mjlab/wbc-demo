@@ -64,6 +64,7 @@ import {
 } from './gen-reference-engine';
 import { makeGenProprioReader, type GenProprioReader } from './gen-proprio';
 import { clamp, playRange } from './gen-params';
+import { applyIdleDeadzone } from './gen-waypoints';
 
 // Physics: use scene_g1.xml as-is (unitree_rl_mjlab/simulate deploy sim; MuJoCo default
 // timestep 0.002 s, no injected <option>). Policy still runs at policy_step_dt (50 Hz).
@@ -614,7 +615,7 @@ export async function createLiveEngine(
       pzLo,
       pzHi,
     );
-    return { vx, vy, wz };
+    return applyIdleDeadzone(vx, vy, wz);
   }
 
   async function enterGen(): Promise<boolean> {

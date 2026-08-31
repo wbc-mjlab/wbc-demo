@@ -7,6 +7,11 @@
  * `data.geom_xpos` / `data.geom_xmat` (per-geom world transform) and updates the
  * matrices. (Same approach as zalo/mujoco_wasm's Three.js demo.) The engine uses
  * this rather than a baked GLB — it's crisper and needs no separate mesh asset.
+ *
+ * Materials follow mjswan's MuJoCo → MeshPhysicalMaterial mapping: dielectric
+ * defaults with specular scaled by the scene's specular/diffuse light ratio.
+ * Silver vs black parts get different roughness; specular is cool-tinted to
+ * sit in the branded teal viewport.
  */
 
 import {
@@ -19,11 +24,12 @@ import {
   Group,
   Matrix4,
   Mesh,
-  MeshStandardMaterial,
+  MeshPhysicalMaterial,
   Object3D,
   PlaneGeometry,
   Quaternion,
   SphereGeometry,
+  SRGBColorSpace,
   Vector3,
 } from 'three';
 import type { MujocoSim } from './mujoco';
@@ -36,6 +42,16 @@ const ELLIPSOID = 4;
 const CYLINDER = 5;
 const BOX = 6;
 const MESH = 7;
+
+/**
+ * Scene specular/diffuse peak ratio for G1 MJCF lighting
+ * (directional defaults 0.3/0.7 + headlight 0.9/0.6), matching mjswan
+ * `lightSpecularRatio`. Applied to material `specularIntensity`.
+ */
+const LIGHT_SPECULAR_RATIO = (0.3 + 0.9) / (0.7 + 0.6);
+
+/** MuJoCo material defaults when MJCF sets only rgba (Menagerie / G1). */
+const MJ_MAT_SPECULAR = 0.5;
 
 const Z_UP_TO_Y_UP = new Quaternion().setFromAxisAngle(
   new Vector3(1, 0, 0),
@@ -96,15 +112,29 @@ export function buildGeomRenderer(opts: {
     );
     if (!geometry) continue;
     const r = g * 4;
-    const material = new MeshStandardMaterial({
-      color: new Color(geomRgba[r], geomRgba[r + 1], geomRgba[r + 2]),
-      roughness: 0.82,
-      metalness: 0.06,
-      envMapIntensity: 0.08,
+    // MJCF rgba is authored as display/sRGB (black≈0.2). With sRGB framebuffer
+    // output we must convert into linear working space, or darks lift to grey.
+    const color = new Color().setRGB(
+      geomRgba[r],
+      geomRgba[r + 1],
+      geomRgba[r + 2],
+      SRGBColorSpace,
+    );
+    // Silver (bright) a bit glossier; black parts more matte — reads with the floor.
+    const luma = 0.2126 * geomRgba[r] + 0.7152 * geomRgba[r + 1] + 0.0722 * geomRgba[r + 2];
+    const shininess = luma > 0.35 ? 0.68 : 0.48;
+    const material = new MeshPhysicalMaterial({
+      color,
+      roughness: 1 - shininess,
+      metalness: 0,
+      specularIntensity: MJ_MAT_SPECULAR * LIGHT_SPECULAR_RATIO,
+      // Cool specular so highlights echo the teal viewport, not studio white.
+      specularColor: new Color(0xd4e4f0),
     });
     const mesh = new Mesh(geometry, material);
+    // Match mjswan: meshes cast; only non-mesh geoms receive (avoids muddy self-shadow).
     mesh.castShadow = true;
-    mesh.receiveShadow = true;
+    mesh.receiveShadow = geomType[g] !== MESH;
     mesh.matrixAutoUpdate = false; // we set the matrix directly each frame
     mesh.userData.bodyId = geomBodyId[g] as number;
     meshes[g] = mesh;

@@ -41,7 +41,36 @@ export function integrateVelToSparseWaypoints(
   return { xy, ang };
 }
 
-function expSmooth(current: number, target: number, dt: number, tau: number): number {
+/** Match ``wbc_gen.mdp.loco_style`` idle deadzone. */
+export const CMD_IDLE_LIN_DEADZONE = 0.05;
+export const CMD_IDLE_ANG_DEADZONE = 0.05;
+export const FALLEN_GRAVITY_Z = -0.5;
+
+export function isStationaryCommand(vx: number, vy: number, wz: number): boolean {
+  return (
+    Math.abs(vx) <= CMD_IDLE_LIN_DEADZONE &&
+    Math.abs(vy) <= CMD_IDLE_LIN_DEADZONE &&
+    Math.abs(wz) <= CMD_IDLE_ANG_DEADZONE
+  );
+}
+
+export function applyIdleDeadzone(
+  vx: number,
+  vy: number,
+  wz: number,
+): { vx: number; vy: number; wz: number } {
+  if (isStationaryCommand(vx, vy, wz)) return { vx: 0, vy: 0, wz: 0 };
+  return { vx, vy, wz };
+}
+
+/** Exponential smoothing toward ``target`` (``tau <= 0`` snaps). */
+export function lowpassFirstOrder(
+  current: number,
+  target: number,
+  dt: number,
+  tau: number,
+): number {
+  if (tau <= 1e-6) return target;
   const alpha = 1 - Math.exp(-dt / Math.max(tau, 1e-4));
   return current + alpha * (target - current);
 }
@@ -61,8 +90,8 @@ export function lowpassHeightWaypoints(
     heightWp.fill(heightCmd);
     return;
   }
-  heightWp[k - 1] = expSmooth(heightWp[k - 1]!, heightCmd, dt, tau);
+  heightWp[k - 1] = lowpassFirstOrder(heightWp[k - 1]!, heightCmd, dt, tau);
   for (let i = k - 2; i >= 0; i--) {
-    heightWp[i] = expSmooth(heightWp[i]!, heightWp[i + 1]!, dt, tau);
+    heightWp[i] = lowpassFirstOrder(heightWp[i]!, heightWp[i + 1]!, dt, tau);
   }
 }

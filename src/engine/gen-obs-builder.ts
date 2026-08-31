@@ -6,15 +6,36 @@
 import type { GenDeployParams } from './gen-params';
 import { clamp, playRange } from './gen-params';
 import {
+  applyIdleDeadzone,
+  FALLEN_GRAVITY_Z,
   integrateVelToSparseWaypoints,
+  lowpassFirstOrder,
   lowpassHeightWaypoints,
 } from './gen-waypoints';
 
 export type GenProprioSample = Record<string, Float32Array>;
 
+function styleHeightDeploy(params: GenDeployParams, name: string): number {
+  const range = params.command.styleHeightRanges[name];
+  const lo = range?.[0] ?? 0;
+  const hi = range?.[1] ?? 1;
+  // Prefer the exported per-style command (median clip height for that style).
+  // The envelope midpoint is only a fallback for older configs: the `sit`
+  // envelope spans standing-to-floor because the sitting clips include
+  // start/stop transitions, so its midpoint is nowhere near a seated pose.
+  const measured = params.command.styleHeightDeploy[name];
+  if (measured != null && Number.isFinite(measured)) {
+    return clamp(measured, lo, hi);
+  }
+  const mid = 0.5 * (lo + hi);
+  const preferred = name === 'stand_walk' ? 0.81 : mid;
+  return clamp(preferred, lo, hi);
+}
+
 function defaultStandHeight(params: GenDeployParams): number {
-  const [lo, hi] = playRange(params, 'height', [0.75, 0.85]);
-  return clamp(0.8, lo, hi);
+  const preferred = styleHeightDeploy(params, 'stand_walk');
+  const [lo, hi] = playRange(params, 'height', [0.65, 0.85]);
+  return clamp(preferred, lo, hi);
 }
 
 function zeroTerm(dim: number, name: string): Float32Array {
@@ -36,9 +57,12 @@ export function standingProprioSample(params: GenDeployParams): GenProprioSample
 export class GenObsBuilder {
   private readonly rings = new Map<string, Float32Array[]>();
   private historyReady = false;
-  private heightCmd = 0.8;
+  private heightCmd = 0.81;
   private heightWp = new Float32Array(0);
   private styleIndex = 0;
+  private velSmooth = { vx: 0, vy: 0, wz: 0 };
+  private lastGz = -1;
+  private fallenHold = 0;
 
   constructor(private readonly params: GenDeployParams) {
     for (const name of params.stateObservationNames) this.rings.set(name, []);
@@ -95,11 +119,19 @@ export class GenObsBuilder {
     if (!name) return;
     const range = this.params.command.styleHeightRanges[name];
     if (!range) return;
-    this.seedHeight(0.5 * (range[0] + range[1]));
+    this.seedHeight(styleHeightDeploy(this.params, name));
   }
 
   isHistoryReady(): boolean {
     return this.historyReady;
+  }
+
+  isFallen(): boolean {
+    return this.lastGz > FALLEN_GRAVITY_Z;
+  }
+
+  getFallenHold(): number {
+    return this.fallenHold;
   }
 
   reset(fill: GenProprioSample): void {
@@ -116,6 +148,9 @@ export class GenObsBuilder {
     }
     this.historyReady = true;
     this.seedHeight(defaultStandHeight(this.params));
+    this.velSmooth = { vx: 0, vy: 0, wz: 0 };
+    this.lastGz = -1;
+    this.fallenHold = 0;
   }
 
   push(sample: GenProprioSample): void {
@@ -132,6 +167,11 @@ export class GenObsBuilder {
       ring.push(vals);
       while (ring.length > cfg.historyLength) ring.shift();
     }
+    const grav = sample.projected_gravity;
+    if (grav && grav.length >= 3) {
+      this.lastGz = grav[2]!;
+      this.fallenHold = this.lastGz > FALLEN_GRAVITY_Z ? this.fallenHold + 1 : 0;
+    }
     this.historyReady = true;
     for (const name of this.params.stateObservationNames) {
       const cfg = this.params.stateObservations[name]!;
@@ -143,6 +183,28 @@ export class GenObsBuilder {
   }
 
   buildObs(vx: number, vy: number, wz: number): Float32Array {
+    const dt = this.params.stepDt;
+    const tau = this.params.command.commandSmoothingTau;
+    this.velSmooth.vx = lowpassFirstOrder(this.velSmooth.vx, vx, dt, tau);
+    this.velSmooth.vy = lowpassFirstOrder(this.velSmooth.vy, vy, dt, tau);
+    this.velSmooth.wz = lowpassFirstOrder(this.velSmooth.wz, wz, dt, tau);
+
+    let { vx: vxCmd, vy: vyCmd, wz: wzCmd } = applyIdleDeadzone(
+      this.velSmooth.vx,
+      this.velSmooth.vy,
+      this.velSmooth.wz,
+    );
+    // Down: hold still and let the generator get itself up. Recovery has no
+    // command channel — the network reads "I am on the ground" out of proprio,
+    // so nothing style- or height-specific is needed here.
+    if (this.isFallen()) {
+      vxCmd = 0;
+      vyCmd = 0;
+      wzCmd = 0;
+      this.velSmooth = { vx: 0, vy: 0, wz: 0 };
+      this.seedHeight(defaultStandHeight(this.params));
+    }
+
     const obs = new Float32Array(this.params.inputDim);
     let k = 0;
     for (const name of this.params.stateObservationNames) {
@@ -159,9 +221,9 @@ export class GenObsBuilder {
 
     const horizons = this.params.command.horizons;
     const { xy, ang } = integrateVelToSparseWaypoints(
-      vx,
-      vy,
-      wz,
+      vxCmd,
+      vyCmd,
+      wzCmd,
       horizons,
       this.params.stepDt,
       this.params.command.positionScale,
@@ -176,7 +238,9 @@ export class GenObsBuilder {
       let block: Float32Array;
       if (name === 'cmd_style') {
         block = new Float32Array(term.flatWidth);
-        const idx = clamp(this.styleIndex, 0, Math.max(term.flatWidth - 1, 0));
+        const idx = this.isFallen()
+          ? 0
+          : clamp(this.styleIndex, 0, Math.max(term.flatWidth - 1, 0));
         if (term.flatWidth > 0) block[idx] = 1;
       } else if (name === 'cmd_xy_waypoints') {
         block = xy;
