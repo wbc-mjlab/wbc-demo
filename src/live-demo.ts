@@ -570,12 +570,8 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
       pad.sprint = false;
       pad.crouch = false;
       stickKnob.style.transform = '';
-      sprintEl.setAttribute('aria-pressed', 'false');
-      crouchEl.setAttribute('aria-pressed', 'false');
-      yawLEl.setAttribute('aria-pressed', 'false');
-      yawREl.setAttribute('aria-pressed', 'false');
-      notifyTeleop?.();
     }
+    notifyTeleop?.();
   }
 
   function renderState(): void {
@@ -801,11 +797,23 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
 
       const heldKeys = new Set<string>();
 
+      const syncPadHighlights = (input: {
+        yaw: number;
+        sprint: boolean;
+        crouch: boolean;
+      }): void => {
+        sprintEl.setAttribute('aria-pressed', String(input.sprint));
+        crouchEl.setAttribute('aria-pressed', String(input.crouch));
+        yawLEl.setAttribute('aria-pressed', String(input.yaw > 0.05));
+        yawREl.setAttribute('aria-pressed', String(input.yaw < -0.05));
+      };
+
       const syncTeleop = (): void => {
         if (refSource !== 'gen') {
           h.setGenTeleop({
             forward: 0, strafe: 0, yaw: 0, sprint: false, crouch: false,
           });
+          syncPadHighlights({ yaw: 0, sprint: false, crouch: false });
           return;
         }
         const keyForward = (heldKeys.has('KeyW') ? 1 : 0) + (heldKeys.has('KeyS') ? -1 : 0);
@@ -813,13 +821,17 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
         const keyYaw = (heldKeys.has('KeyA') ? 1 : 0) + (heldKeys.has('KeyD') ? -1 : 0);
         const keySprint = heldKeys.has('ShiftLeft') || heldKeys.has('ShiftRight');
         const keyCrouch = heldKeys.has('Space');
+        const yaw = clampAxis(keyYaw + pad.yaw);
+        const sprint = keySprint || pad.sprint;
+        const crouch = keyCrouch || pad.crouch;
         h.setGenTeleop({
           forward: clampAxis(keyForward + pad.forward),
           strafe: clampAxis(keyStrafe + pad.strafe),
-          yaw: clampAxis(keyYaw + pad.yaw),
-          sprint: keySprint || pad.sprint,
-          crouch: keyCrouch || pad.crouch,
+          yaw,
+          sprint,
+          crouch,
         });
+        syncPadHighlights({ yaw, sprint, crouch });
       };
       notifyTeleop = syncTeleop;
 
@@ -1125,7 +1137,6 @@ function wireVirtualPad(opts: {
     const set = (down: boolean): void => {
       if (held === down) return;
       held = down;
-      btn.setAttribute('aria-pressed', String(down));
       apply(down);
       onChange();
     };
@@ -1148,17 +1159,17 @@ function wireVirtualPad(opts: {
     };
   };
 
+  let yawL = false;
+  let yawR = false;
   const syncYaw = (): void => {
-    const l = yawLEl.getAttribute('aria-pressed') === 'true';
-    const r = yawREl.getAttribute('aria-pressed') === 'true';
-    pad.yaw = (l ? 1 : 0) + (r ? -1 : 0);
+    pad.yaw = (yawL ? 1 : 0) + (yawR ? -1 : 0);
   };
 
   const cleanups = [
     holdBtn(sprintEl, (d) => { pad.sprint = d; }),
     holdBtn(crouchEl, (d) => { pad.crouch = d; }),
-    holdBtn(yawLEl, () => { syncYaw(); }),
-    holdBtn(yawREl, () => { syncYaw(); }),
+    holdBtn(yawLEl, (d) => { yawL = d; syncYaw(); }),
+    holdBtn(yawREl, (d) => { yawR = d; syncYaw(); }),
   ];
 
   return () => {

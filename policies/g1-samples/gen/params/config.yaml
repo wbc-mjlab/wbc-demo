@@ -69,8 +69,8 @@ command:
         stand_walk: &id001 [0.78, 0.83]
         crouch: &id002 [0.36, 0.73]
         run: &id003 [0.71, 0.83]
-        sit: &id004 [0.1, 0.84]
-      style_height_deploy: {stand_walk: 0.82, crouch: 0.62, run: 0.8, sit: 0.14}
+        sit: &id004 [0.0, 0.84]
+      style_height_deploy: {stand_walk: 0.8, crouch: 0.5, run: 0.75, sit: 0.3}
     cmd_xy_waypoints:
       training_name: cmd_xy_waypoints
       deploy_name: cmd_xy_waypoints
@@ -113,7 +113,7 @@ command:
     crouch: *id002
     run: *id003
     sit: *id004
-  style_height_deploy: {stand_walk: 0.82, crouch: 0.62, run: 0.8, sit: 0.14}
+  style_height_deploy: {stand_walk: 0.8, crouch: 0.5, run: 0.75, sit: 0.3}
 outputs:
   field_order: [ref_base_height, ref_base_lin_vel_b, ref_base_ang_vel_b, ref_gravity_b,
     ref_joint_pos]
@@ -127,4 +127,4 @@ play_vel_ranges:
   lin_vel_x: [-1.5, 4.0]
   lin_vel_y: [-1.0, 1.0]
   ang_vel_z: [-3.0, 3.0]
-  height: [0.25, 0.85]
+  height: [0.0, 0.85]

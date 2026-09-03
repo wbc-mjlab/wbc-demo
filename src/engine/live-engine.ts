@@ -69,7 +69,7 @@ import { applyIdleDeadzone } from './gen-waypoints';
 // Physics: use scene_g1.xml as-is (unitree_rl_mjlab/simulate deploy sim; MuJoCo default
 // timestep 0.002 s, no injected <option>). Policy still runs at policy_step_dt (50 Hz).
 /** Stick/key cruise × gait vel_mult, then clamped to gen play_vel_ranges. */
-const CRUISE_VX: [number, number] = [-1.0, 1.2];
+const CRUISE_VX: [number, number] = [-0.8, 0.9];
 const CRUISE_VY: [number, number] = [-1.0, 1.0];
 const CRUISE_WZ: [number, number] = [-2.0, 2.0];
 /** Match wbc_g1_deploy config.yaml reference_node gait heights + vel_mult. */
@@ -77,7 +77,7 @@ const STAND_HEIGHT = 0.81;
 const SPRINT_HEIGHT = 0.75;
 const CROUCH_HEIGHT = 0.55;
 const WALK_VEL_MULT = 1.0;
-const SPRINT_VEL_MULT = 3.5;
+const SPRINT_VEL_MULT = 4.5;
 const CROUCH_VEL_MULT = 0.9;
 const SCENE_XML = 'scene_g1.xml';
 
