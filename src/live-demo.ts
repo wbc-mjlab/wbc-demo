@@ -413,6 +413,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
     </div>`;
 
   const $ = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel)!;
+  const $opt = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel);
   const rootEl = $('#lv-root');
   const viewport = $<HTMLElement>('#lv-viewport');
   const bootEl = $<HTMLElement>('#lv-boot');
@@ -424,11 +425,11 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
   const metricsEl = $('#lv-metrics');
   const progressEl = $('#lv-progress');
   const clipEl = $<HTMLSelectElement>('#lv-clip');
-  const clipMiniEl = $<HTMLSelectElement>('#lv-clip-mini');
-  const miniBarEl = $<HTMLElement>('#lv-minibar');
-  const miniPlayEl = $<HTMLButtonElement>('#lv-mini-play');
-  const miniPauseEl = $<HTMLButtonElement>('#lv-mini-pause');
-  const miniLoopEl = $<HTMLButtonElement>('#lv-mini-loop');
+  const clipMiniEl = $opt<HTMLSelectElement>('#lv-clip-mini');
+  const miniBarEl = $opt<HTMLElement>('#lv-minibar');
+  const miniPlayEl = $opt<HTMLButtonElement>('#lv-mini-play');
+  const miniPauseEl = $opt<HTMLButtonElement>('#lv-mini-pause');
+  const miniLoopEl = $opt<HTMLButtonElement>('#lv-mini-loop');
   const prevEl = $<HTMLButtonElement>('#lv-prev');
   const nextEl = $<HTMLButtonElement>('#lv-next');
   const getupEl = $<HTMLButtonElement>('#lv-getup');
@@ -665,6 +666,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
   function syncMiniTransport(): void {
     const genOn = refSource === 'gen';
     rootEl.dataset.ref = genOn ? 'gen' : 'clips';
+    if (!miniBarEl || !miniPlayEl || !miniPauseEl || !miniLoopEl || !clipMiniEl) return;
     const showMini = !genOn;
     miniBarEl.hidden = !showMini;
     miniBarEl.setAttribute('aria-hidden', String(!showMini));
@@ -681,7 +683,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
       .map((c) => `<option value="${c.id}"${c.id === current ? ' selected' : ''}>${escapeHtml(c.name)}</option>`)
       .join('');
     clipEl.innerHTML = html;
-    clipMiniEl.innerHTML = html;
+    if (clipMiniEl) clipMiniEl.innerHTML = html;
   }
 
   let hudVisible = opts.startHudVisible;
@@ -734,7 +736,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
     updateFsm(s: LiveStatus) {
       refSource = s.refSource;
       clipEl.disabled = !s.canBrowse;
-      clipMiniEl.disabled = !s.canBrowse;
+      if (clipMiniEl) clipMiniEl.disabled = !s.canBrowse;
       prevEl.disabled = !s.canBrowse;
       nextEl.disabled = !s.canBrowse;
       getupEl.disabled = !s.canGetup;
@@ -785,7 +787,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
         progressEl.style.width = '100%';
       }
       if (clipEl.value !== s.clipId && s.clipId) clipEl.value = s.clipId;
-      if (clipMiniEl.value !== s.clipId && s.clipId) clipMiniEl.value = s.clipId;
+      if (clipMiniEl && clipMiniEl.value !== s.clipId && s.clipId) clipMiniEl.value = s.clipId;
     },
     wire(h: LiveEngineHandle) {
       let following = true;
@@ -862,7 +864,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
         void h.selectClip(id);
       };
       clipEl.addEventListener('change', () => selectClip(clipEl.value));
-      clipMiniEl.addEventListener('change', () => selectClip(clipMiniEl.value));
+      clipMiniEl?.addEventListener('change', () => selectClip(clipMiniEl.value));
       prevEl.addEventListener('click', () => void h.browsePrevClip());
       nextEl.addEventListener('click', () => void h.browseNextClip());
       getupEl.addEventListener('click', () => void h.triggerGetup());
@@ -899,7 +901,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
       const setLoopUi = (on: boolean): void => {
         h.setLoop(on);
         loopEl.setAttribute('aria-pressed', String(on));
-        miniLoopEl.setAttribute('aria-pressed', String(on));
+        miniLoopEl?.setAttribute('aria-pressed', String(on));
       };
       loopEl.addEventListener('click', () => {
         setLoopUi(loopEl.getAttribute('aria-pressed') !== 'true');
@@ -915,7 +917,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
         playing = h.toggle();
         syncPlayUi();
       });
-      miniPlayEl.addEventListener('click', () => {
+      miniPlayEl?.addEventListener('click', () => {
         if (refSource === 'gen') return;
         if (!playing) {
           h.play();
@@ -923,7 +925,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
           syncPlayUi();
         }
       });
-      miniPauseEl.addEventListener('click', () => {
+      miniPauseEl?.addEventListener('click', () => {
         if (refSource === 'gen') return;
         if (playing) {
           h.pause();
@@ -931,7 +933,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
           syncPlayUi();
         }
       });
-      miniLoopEl.addEventListener('click', () => {
+      miniLoopEl?.addEventListener('click', () => {
         if (refSource === 'gen') return;
         setLoopUi(miniLoopEl.getAttribute('aria-pressed') !== 'true');
       });
