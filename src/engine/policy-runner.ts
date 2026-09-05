@@ -12,6 +12,7 @@
  */
 
 import * as ort from 'onnxruntime-web';
+import { wasmSimdSupported } from '../platform';
 
 // The ORT wasm runtime is served as a static asset from `public/ort/` (its npm
 // `exports` field doesn't expose the wasm subpath to a Vite `?url` import). We
@@ -21,11 +22,19 @@ const ORT_WASM_BASE = `${import.meta.env.BASE_URL}ort/`;
 let configured = false;
 function configureOrt(): void {
   if (configured) return;
+  if (!wasmSimdSupported()) {
+    throw new Error(
+      'This browser has no WebAssembly SIMD (iOS 16.4+ / current Safari required).',
+    );
+  }
   ort.env.wasm.numThreads = 1; // single-threaded → no SAB → no COOP/COEP
   ort.env.wasm.simd = true;
   ort.env.wasm.proxy = false;
-  // Base URL ORT resolves its wasm/mjs runtime files against.
-  ort.env.wasm.wasmPaths = ORT_WASM_BASE;
+  // Explicit files — Safari in an iframe resolves a trailing-slash base poorly.
+  ort.env.wasm.wasmPaths = {
+    wasm: `${ORT_WASM_BASE}ort-wasm-simd-threaded.wasm`,
+    mjs: `${ORT_WASM_BASE}ort-wasm-simd-threaded.mjs`,
+  };
   configured = true;
 }
 

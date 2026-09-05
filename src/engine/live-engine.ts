@@ -65,6 +65,7 @@ import {
 import { makeGenProprioReader, type GenProprioReader } from './gen-proprio';
 import { clamp, playRange } from './gen-params';
 import { applyIdleDeadzone } from './gen-waypoints';
+import { preferLowQualityGl, whenElementSized } from '../platform';
 
 // Physics: use scene_g1.xml as-is (unitree_rl_mjlab/simulate deploy sim; MuJoCo default
 // timestep 0.002 s, no injected <option>). Policy still runs at policy_step_dt (50 Hz).
@@ -326,7 +327,14 @@ export async function createLiveEngine(
     msg(`Generator unavailable: ${String(err)}`);
   }
 
-  const viewer = new Viewer(container, { lowQuality: opts.lowQuality });
+  await whenElementSized(container);
+  let allowAutoFrame = false;
+  const viewer = new Viewer(container, {
+    lowQuality: opts.lowQuality || preferLowQualityGl(),
+    onResize: () => {
+      if (allowAutoFrame) maybeReframeOnResize();
+    },
+  });
   const ph = viewer.robotRoot.getObjectByName('placeholder-robot');
   if (ph) viewer.robotRoot.remove(ph);
   const robot: GeomBinding = buildGeomRenderer({
@@ -486,6 +494,7 @@ export async function createLiveEngine(
   const chaseLook = new Vector3();
   const chaseFwd = new Vector3();
   let followInit = false;
+  let lastFitAspect = 0;
 
   const browsableClips = clipManifest
     ? resolveBrowsableClips(refIndex, clipManifest)
@@ -846,6 +855,7 @@ export async function createLiveEngine(
     await enterGen();
   }
   frameViewer();
+  allowAutoFrame = true;
   opts.onReady?.(browsableClips);
 
   // ---- control + render loop ----------------------------------------------
@@ -972,7 +982,22 @@ export async function createLiveEngine(
     if (box.isEmpty()) return null;
     box.getCenter(viewCenter);
     box.getSize(viewSize);
-    return Math.max(viewSize.x, viewSize.y, viewSize.z, 1.1);
+    const r = Math.max(viewSize.x, viewSize.y, viewSize.z);
+    return r > 0.05 ? r : null;
+  }
+
+  /** Distance that fills the current viewport with the robot bbox. */
+  function fitCameraDistance(): number | null {
+    if (robotViewRadius() == null) return null;
+    const aspect = Math.max(viewer.camera.aspect, 0.2);
+    const halfH = Math.max(viewSize.y * 0.5, 0.55);
+    const halfW = Math.max(Math.max(viewSize.x, viewSize.z) * 0.5, 0.22);
+    const vFov = (viewer.camera.fov * Math.PI) / 180;
+    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
+    const distV = halfH / Math.tan(vFov / 2);
+    const distH = halfW / Math.tan(hFov / 2);
+    const pad = aspect < 0.85 ? 1.08 : aspect < 1.25 ? 1.14 : 1.18;
+    return Math.max(distV, distH) * pad * 1.1;
   }
 
   function followRobot(): void {
@@ -1051,8 +1076,9 @@ export async function createLiveEngine(
     const lookY = Math.max(pz * 0.42, 0.5) + 0.18;
     chaseLook.set(px, lookY, -py);
 
-    const back = 1.9;
-    const up = 0.9;
+    const dist = fitCameraDistance() ?? 1.8;
+    const back = Math.max(1.15, dist * 0.72);
+    const up = Math.max(0.42, dist * 0.26);
     chaseCam.copy(chaseLook).addScaledVector(chaseFwd, -back);
     chaseCam.y += up;
 
@@ -1086,19 +1112,39 @@ export async function createLiveEngine(
   }
 
   function frameViewer(): void {
-    const radius = robotViewRadius();
-    if (radius == null) return;
-    const targetY = Math.max(viewCenter.y, 0.7);
+    const dist = fitCameraDistance();
+    if (dist == null) return;
+    const targetY = Math.max(viewCenter.y, 0.5);
     viewer.controls.target.set(viewCenter.x, targetY, viewCenter.z);
+    // 3/4 orbit, elevation ~18° — distance from FOV so the robot fills the frame.
+    const az = Math.atan2(1.9, 1.3);
+    const el = 18 * (Math.PI / 180);
+    const horiz = dist * Math.cos(el);
     viewer.camera.position.set(
-      viewCenter.x + radius * 1.3,
-      targetY + radius * 0.55,
-      viewCenter.z + radius * 1.9,
+      viewCenter.x + horiz * Math.cos(az),
+      targetY + dist * Math.sin(el),
+      viewCenter.z + horiz * Math.sin(az),
     );
-    viewer.camera.near = radius / 100;
-    viewer.camera.far = radius * 100;
+    viewer.camera.near = dist / 80;
+    viewer.camera.far = dist * 80;
     viewer.camera.updateProjectionMatrix();
+    viewer.camera.lookAt(viewer.controls.target);
     followInit = true;
+    lastFitAspect = viewer.camera.aspect;
+  }
+
+  function maybeReframeOnResize(): void {
+    const a = viewer.camera.aspect;
+    if (lastFitAspect > 0 && Math.abs(a - lastFitAspect) < 0.03) return;
+    lastFitAspect = a;
+    if (chase) {
+      chaseRobot();
+      viewer.camera.position.copy(chaseCam);
+      viewer.controls.target.copy(chaseLook);
+      viewer.camera.lookAt(viewer.controls.target);
+    } else {
+      frameViewer();
+    }
   }
 
   status.ready = true;

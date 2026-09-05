@@ -29,6 +29,7 @@ import {
   themeToggleHtml,
   wireThemeToggle,
 } from './theme';
+import { preferLowQualityGl } from './platform';
 
 export type DemoPageKind = 'live' | 'tracking';
 
@@ -113,6 +114,8 @@ export function bootDemoPage(opts: DemoPageOptions): void {
   const padParam = params.get('pad');
   const hudParam = params.get('hud');
   const modeParam = params.get('mode') ?? params.get('gen');
+  const lockParam = params.get('lock');
+  const switchParam = params.get('switch');
   const mobile = preferMinimalChrome();
   const entry = id ? getPolicy(id) : undefined;
   if (!entry) {
@@ -149,7 +152,7 @@ export function bootDemoPage(opts: DemoPageOptions): void {
       : padParam === 'off' ? false
         : preferMobilePad();
   // Mobile defaults: tracking + HUD hidden. Override with ?hud=on|off and
-  // ?mode=gen|tracking (or ?gen=1|0).
+  // ?mode=gen|tracking (or ?gen=1|0). ?lock=gen hides the mode switch (and G).
   const startHudVisible =
     hudParam === 'off' ? false
       : hudParam === 'on' ? true
@@ -170,6 +173,11 @@ export function bootDemoPage(opts: DemoPageOptions): void {
   } else {
     startInGen = mobile ? false : undefined;
   }
+  const lockGen = !tracking && (
+    lockParam === 'gen' || lockParam === 'generator'
+    || switchParam === 'off'
+  );
+  if (lockGen) startInGen = true;
 
   root.classList.remove('page');
   const ui = buildUi(root, {
@@ -179,6 +187,7 @@ export function bootDemoPage(opts: DemoPageOptions): void {
     chrome,
     padEnabled,
     startHudVisible,
+    lockGen,
     onChromeChange: (next) => { chrome = next; },
   });
 
@@ -196,6 +205,7 @@ export function bootDemoPage(opts: DemoPageOptions): void {
     autoplay: true,
     follow: true,
     interactiveDrag: true,
+    lowQuality: preferLowQualityGl(),
     startInGen,
     onMessage: (m) => ui.setStatus(m),
     onReady: (clips) => ui.populateClips(clips),
@@ -208,6 +218,15 @@ export function bootDemoPage(opts: DemoPageOptions): void {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (window as any).__engine = handle;
       ui.wire(handle);
+      let resumeOnVisible = handle.status.playing;
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          resumeOnVisible = handle.status.playing;
+          handle.pause();
+        } else if (resumeOnVisible) {
+          handle.play();
+        }
+      });
     })
     .catch((err) => ui.setStatus(String(err), true));
 }
@@ -219,15 +238,19 @@ interface BuildUiOpts {
   chrome: 'full' | 'minimal';
   padEnabled: boolean;
   startHudVisible: boolean;
+  lockGen: boolean;
   onChromeChange: (chrome: 'full' | 'minimal') => void;
 }
 
 function buildUi(root: HTMLElement, opts: BuildUiOpts) {
   const tracking = opts.kind === 'tracking';
+  const lockGen = opts.lockGen;
   // Live page: in-page Gen ↔ tracking toggle. Tracking page: link out to Gen demo.
   const modeControl = tracking
     ? `<a class="live__mode-link" href="${liveHref(new URLSearchParams(window.location.search))}" title="Open generator demo">generator</a>`
-    : `<button type="button" id="lv-mode-toggle" class="live__btn live__btn--mode" title="Switch mode (G)" aria-pressed="false" disabled>generator</button>`;
+    : lockGen
+      ? ''
+      : `<button type="button" id="lv-mode-toggle" class="live__btn live__btn--mode" title="Switch mode (G)" aria-pressed="false" disabled>generator</button>`;
 
   root.innerHTML = `
     <div class="live" id="lv-root" data-state="boot" data-chrome="${opts.chrome}" data-kind="${opts.kind}" data-hud="${opts.startHudVisible ? 'on' : 'off'}" data-loading="true">
@@ -300,7 +323,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
                     <tr><th scope="row"><kbd>F</kbd></th><td>Toggle camera follow</td></tr>
                     <tr><th scope="row"><kbd>V</kbd></th><td>Toggle chase cam</td></tr>
                     <tr><th scope="row"><kbd>P</kbd></th><td>Policy on / off</td></tr>
-                    <tr data-keys-mode="live"><th scope="row"><kbd>G</kbd></th><td>Toggle generator ↔ tracking</td></tr>
+                    ${lockGen ? '' : '<tr data-keys-mode="live"><th scope="row"><kbd>G</kbd></th><td>Toggle generator ↔ tracking</td></tr>'}
                     <tr><th scope="row"><kbd>H</kbd></th><td>Hide / show HUD</td></tr>
                     <tr><th scope="row"><kbd>?</kbd></th><td>Show / hide this menu</td></tr>
                     <tr><th scope="row">Drag</th><td>Perturb robot</td></tr>
@@ -361,7 +384,7 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
         </div>
       </div>
 
-      ${tracking ? '' : `
+      ${tracking || lockGen ? '' : `
       <div class="live__hud-mini" id="lv-hud-mini">
         <button type="button" id="lv-mode-mini" class="live__mode-mini live__btn live__btn--mode" title="Switch mode (G)" aria-pressed="false" disabled>generator</button>
         <div class="live__minibar" id="lv-minibar" aria-label="Compact clip controls">
@@ -410,8 +433,8 @@ function buildUi(root: HTMLElement, opts: BuildUiOpts) {
   const nextEl = $<HTMLButtonElement>('#lv-next');
   const getupEl = $<HTMLButtonElement>('#lv-getup');
   const liedownEl = $<HTMLButtonElement>('#lv-liedown');
-  const genEl = tracking ? null : $<HTMLButtonElement>('#lv-mode-toggle');
-  const genMiniEl = tracking ? null : $<HTMLButtonElement>('#lv-mode-mini');
+  const genEl = tracking || lockGen ? null : $<HTMLButtonElement>('#lv-mode-toggle');
+  const genMiniEl = tracking || lockGen ? null : $<HTMLButtonElement>('#lv-mode-mini');
   const speedEl = $<HTMLSelectElement>('#lv-speed');
   const modeEl = $<HTMLButtonElement>('#lv-mode');
   const pushEl = $<HTMLButtonElement>('#lv-push');

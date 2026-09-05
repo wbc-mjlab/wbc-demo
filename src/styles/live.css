@@ -11,7 +11,9 @@
  */
 
 .live {
-  position: fixed;
+  /* absolute, not fixed: iOS Safari positions `fixed` against the parent
+     page when this demo is in an iframe, so the stage can be 0-height. */
+  position: absolute;
   inset: 0;
   overflow: hidden;
   background: var(--color-viewport-bg);
@@ -118,6 +120,11 @@
 }
 .live__stage canvas {
   display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Depth: a soft radial vignette so the translucent HUD reads at the edges. */

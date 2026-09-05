@@ -25,6 +25,7 @@ static site to **GitHub Pages**.
   stick with the **pad** button (or `?pad=on` / `?pad=off`; preference is saved).
   On phones/tablets the demo starts in **tracking** with the HUD **hidden**
   (`H` to show); override with `?mode=gen|tracking` and `?hud=on|off`.
+  Hide the generator ↔ tracking toggle with `?lock=gen` (also disables `G`).
   The controls help panel switches with Gen vs tracking mode.
 - **Deploy-aligned clip UX** — browsable clips come from
   `policies/<id>/reference/manifest.yaml` (same idea as
@@ -33,7 +34,9 @@ static site to **GitHub Pages**.
   and idle), matching deploy `Wbc_Tracking` behavior.
 - **No special headers** — inference runs on the single-threaded SIMD WASM backend
   (`numThreads = 1`), so there's **no SharedArrayBuffer / COOP-COEP requirement** —
-  it deploys on plain GitHub Pages.
+  it deploys on plain GitHub Pages. iPhone/Safari: needs **iOS 16.4+** (WASM SIMD).
+  The live page uses `position: absolute` (not `fixed`) so an embed iframe gets a
+  real viewport; iOS also runs a cheaper WebGL path (no shadows / 1× pixel ratio).
 
 ## Quick start
 

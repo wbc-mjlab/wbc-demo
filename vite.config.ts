@@ -66,6 +66,24 @@ export default defineConfig({
   plugins: [servePolicies()],
   // onnxruntime-web ships prebuilt wasm; let Vite leave it alone.
   optimizeDeps: { exclude: ['onnxruntime-web'] },
+  server: {
+    // Cursor + this workspace already exhaust Linux inotify (ENOSPC). Polling
+    // avoids `fs.watch` so `npm run dev` still starts.
+    watch: {
+      usePolling: true,
+      interval: 400,
+      ignored: [
+        '**/.git/**',
+        '**/dist/**',
+        '**/*.onnx',
+        '**/*.wasm',
+        '**/*.STL',
+        '**/*.stl',
+        '**/policies/**/reference/**',
+        '**/public/robots/**',
+      ],
+    },
+  },
   build: {
     // Multi-page app: live demo (index.html), tracking-only page, clip gallery,
     // and legacy deep links (policy.html). Three.js code-splits per page so

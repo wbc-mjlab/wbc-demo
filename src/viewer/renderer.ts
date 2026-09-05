@@ -33,6 +33,7 @@ import {
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { preferLowQualityGl } from '../platform';
 
 /**
  * G1 MJCF lighting (`scene_g1.xml` + MuJoCo defaults), mapped the same way as
@@ -105,6 +106,24 @@ export interface ViewerOptions {
    * at 1 and disable shadows.
    */
   lowQuality?: boolean;
+  /** Fired after the canvas is resized (aspect may have changed). */
+  onResize?: () => void;
+}
+
+function makeRenderer(lowQuality: boolean): WebGLRenderer {
+  const opts = {
+    antialias: !lowQuality,
+    alpha: false,
+    stencil: false,
+    depth: true,
+    powerPreference: (lowQuality ? 'low-power' : 'default') as WebGLPowerPreference,
+    failIfMajorPerformanceCaveat: false,
+  };
+  try {
+    return new WebGLRenderer(opts);
+  } catch {
+    return new WebGLRenderer({ ...opts, antialias: false, powerPreference: 'low-power' });
+  }
 }
 
 /**
@@ -129,6 +148,7 @@ export class Viewer {
   private container: HTMLElement;
   private readonly resizeObserver: ResizeObserver;
   private readonly shadowsEnabled: boolean;
+  private readonly onResize?: () => void;
   private rafId = 0;
   private disposed = false;
   /** MuJoCo headlight — follows the camera each frame (mjswan `updateHeadlightFromCamera`). */
@@ -149,7 +169,9 @@ export class Viewer {
 
   constructor(container: HTMLElement, options: ViewerOptions = {}) {
     this.container = container;
-    this.shadowsEnabled = !options.lowQuality;
+    this.onResize = options.onResize;
+    const lowQuality = options.lowQuality || preferLowQualityGl();
+    this.shadowsEnabled = !lowQuality;
 
     this.scene = new Scene();
     const bg = new Color(token('--color-viewport-bg', '#16283a'));
@@ -163,9 +185,9 @@ export class Viewer {
     this.camera = new PerspectiveCamera(50, w / h, 0.01, 200);
     this.camera.position.set(2.5, 1.8, 3.0);
 
-    this.renderer = new WebGLRenderer({ antialias: true });
+    this.renderer = makeRenderer(lowQuality);
     this.renderer.setPixelRatio(
-      options.lowQuality ? 1 : Math.min(window.devicePixelRatio, 2),
+      lowQuality ? 1 : Math.min(window.devicePixelRatio, 2),
     );
     this.renderer.setSize(w, h);
     // Flat MuJoCo response (no ACES). sRGB output keeps CSS theme colors correct.
@@ -176,6 +198,12 @@ export class Viewer {
       this.renderer.shadowMap.type = PCFSoftShadowMap;
     }
     container.appendChild(this.renderer.domElement);
+    this.renderer.domElement.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+    });
+    this.renderer.domElement.addEventListener('webglcontextrestored', () => {
+      this.resize();
+    });
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
@@ -493,6 +521,7 @@ export class Viewer {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
+    this.onResize?.();
   }
 
   /**
