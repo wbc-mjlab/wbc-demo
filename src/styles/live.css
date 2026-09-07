@@ -839,11 +839,31 @@
   }
   .tm__v { font-size: 0.82rem; }
   .live__pad {
-    bottom: 4.1rem;
+    bottom: 3.2rem;
+    gap: 0.65rem;
+    padding: 0 0.7rem 0.45rem;
+  }
+  .live[data-hud="off"] .live__pad {
+    bottom: 0.7rem;
   }
   .live__stick-base {
-    width: 8rem;
-    height: 8rem;
+    width: 5.75rem;
+    height: 5.75rem;
+  }
+  .live__stick-knob {
+    width: 2rem;
+    height: 2rem;
+    margin: -1rem 0 0 -1rem;
+  }
+  .live__pad-actions {
+    width: 7.25rem;
+    gap: 0.32rem;
+  }
+  .live__pad-btn {
+    padding: 0.48rem 0.28rem;
+    min-height: 2.15rem;
+    font-size: 0.64rem;
+    border-radius: 9px;
   }
   .live__keys-body {
     left: 0.5rem;
@@ -856,5 +876,34 @@
   .live__keys-table td {
     font-size: 0.78rem;
     line-height: 1.5;
+  }
+}
+@media (orientation: landscape) and (max-height: 560px) {
+  .live__pad {
+    bottom: 0.45rem;
+    gap: 0.45rem;
+    padding: 0 0.5rem 0.3rem;
+  }
+  .live[data-hud="off"] .live__pad {
+    bottom: 0.4rem;
+  }
+  .live__stick-base {
+    width: 4.75rem;
+    height: 4.75rem;
+  }
+  .live__stick-knob {
+    width: 1.7rem;
+    height: 1.7rem;
+    margin: -0.85rem 0 0 -0.85rem;
+  }
+  .live__pad-actions {
+    width: 6.4rem;
+    gap: 0.25rem;
+  }
+  .live__pad-btn {
+    padding: 0.32rem 0.22rem;
+    min-height: 1.75rem;
+    font-size: 0.58rem;
+    border-radius: 8px;
   }
 }

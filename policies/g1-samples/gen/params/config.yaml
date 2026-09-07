@@ -79,7 +79,7 @@ command:
       history_length: 0
       scale: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
       horizons: [15, 30, 45]
-      position_scale: 1.35
+      position_scale: 1.8
       features_per_horizon: 2
     cmd_height_setpoint:
       training_name: cmd_height_setpoint
@@ -105,7 +105,7 @@ command:
   include_link_height: true
   height_lowpass_tau: 0.0
   command_smoothing_tau: 0.1
-  position_scale: 1.35
+  position_scale: 1.8
   height_scale: 1.0
   style_names: [stand_walk, crouch, run, sit]
   style_height_ranges:
