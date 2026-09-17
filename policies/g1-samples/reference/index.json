@@ -67,6 +67,16 @@
       ]
     },
     {
+      "id": "flip_01",
+      "name": "Flip 01",
+      "file": "flip_01.bin",
+      "frames": 382,
+      "durationSec": 7.64,
+      "tags": [
+        "flip"
+      ]
+    },
+    {
       "id": "flip_02",
       "name": "Flip 02",
       "file": "flip_02.bin",
