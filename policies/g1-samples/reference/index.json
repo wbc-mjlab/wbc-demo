@@ -67,9 +67,9 @@
       ]
     },
     {
-      "id": "flip_01",
-      "name": "Flip 01",
-      "file": "flip_01.bin",
+      "id": "backflip",
+      "name": "Backflip",
+      "file": "backflip.bin",
       "frames": 382,
       "durationSec": 7.64,
       "tags": [
@@ -77,9 +77,9 @@
       ]
     },
     {
-      "id": "flip_02",
-      "name": "Flip 02",
-      "file": "flip_02.bin",
+      "id": "side_flip",
+      "name": "Side Flip",
+      "file": "side_flip.bin",
       "frames": 384,
       "durationSec": 7.68,
       "tags": [
